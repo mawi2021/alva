@@ -1,0 +1,8 @@
+gedcom-551-deutsch.pdf
+MyImport*/*
+data/*
+.vscode
+__pycache__
+config.txt
+icons/Malen
+pip.exe*
