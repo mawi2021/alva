@@ -200,7 +200,7 @@ class Data():
         fw.write("0 HEAD\n")
         fw.write("1 SOUR Alva\n")
         fw.write("2 CORP (private)\n")
-        fw.write("3 ADDR https://github.com/users/mawi2021/projects/1\n")
+        fw.write("3 ADDR https://github.com/mawi2021/alva\n")
         fw.write("1 Gedbas\n")
         fw.write("1 SUBM @SUB@\n")
         fw.write("1 GEDC\n")
