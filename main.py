@@ -20,12 +20,13 @@ class Main(QMainWindow):
         self.config = Config(self)
 
         # ----- Data and Database Access -------------------------------------------------------- #
-        self.data = Data(self)
+        self.data = Data(self, self.config.jData)
 
         # ----- Panel und Layout ---------------------------------------------------------------- #
-        self.widget = MainWidget(self)
+        self.widget = MainWidget(self, self.config.jData, self.data)
         self.setCentralWidget(self.widget)
-        self.graphList = GraphList(self)
+        self.graphList = GraphList(self, self.data)
+        self.widget.setGraphList(self.graphList)
 
         # ----- Menu and all Actions ------------------------------------------------------------ #
         # TODO: Menübar einfärben (?nötig?)
@@ -38,11 +39,12 @@ class Main(QMainWindow):
         self.toolbars = MainWindowToolbars(self)
 
         # TODO: self.setWindowIcon(QtGui.QIcon("icon.png"))
-        # Alfa: (A)hnen(l)isten (f)ür (a)lle
-        self.setWindowTitle("Alfa")  
+        # Alva: (A)hnen(l)isten (v)on (a)llen
+        self.setWindowTitle("Alva")  
         self.setGeometry(self.widget.left, self.widget.top, self.widget.width, self.widget.height)
 
-        self.data.setProject(self.config.DB)
+        if self.config.jData["currProject"] != "":
+            self.data.setProject(self.config.jData["currProject"])
 
     # ------------------------------------------------------------------------------------------- #
     # ----- A C T I O N S ----------------------------------------------------------------------- #
@@ -59,6 +61,7 @@ class Main(QMainWindow):
         print( "onDelete" )
     def onSave(self):
         print( "onSave" )
+        self.data.save()
     def onSaveAs(self):
         print( "onSaveAs" )
     def onImport(self):
@@ -69,10 +72,11 @@ class Main(QMainWindow):
         self.data.exportData()
     def onExit(self):
         print( "onExit" )
-        self.config.onExit()
+        ret = self.data.onExit()
+        if ret:
+            self.config.onExit()
     def onPrint(self):
         print( "onPrint" )
-
     def onFileNav(self):
         print( "onFileNav" )
         self.toolbars.switchDetailToolbar("Nav")
@@ -96,7 +100,7 @@ def main():
     app = QApplication(sys.argv)
     ex = Main()
     ex.show()
-    ex.graphList.addGraph("") # Parameter in Brackets: id of central person; here: no person
+    # ex.graphList.addGraph("") # Parameter in Brackets: id of central person; here: no person
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

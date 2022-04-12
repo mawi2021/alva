@@ -30,10 +30,10 @@ class Graph(QMainWindow):
 
 
     # ----- Read GUI Content from UI File ---------------------------- *
-    def __init__(self, main):
+    def __init__(self, main, data):
         super().__init__()
         self.main = main
-        self.db   = main.data.db
+        self.data = data
 
         self.gedWindow = QMainWindow()
         self.rootPid   = ""
@@ -102,7 +102,7 @@ class Graph(QMainWindow):
             box = self.boxList[pid]
             if x >= box["x"] and x < box["x"] + self.boxWidth:
                 if y >= box["y"] and y <= box["y"] + self.shortBoxHeight:
-                    self.main.widget.persFrame.navigateToPerson(pid)
+                    self.main.widget.setPerson(pid)
                     self.doNotRepaint = False
                     return
                 # Person itself - no match; check partners:
@@ -112,7 +112,7 @@ class Graph(QMainWindow):
                         cnt = cnt + 1
                         yPartner = box["y"] + cnt * self.shortBoxHeight
                         if y >= yPartner and y <= yPartner + self.shortBoxHeight:
-                            self.main.widget.persFrame.navigateToPerson(partner["id"])
+                            self.main.widget.setPerson(partner["id"])
                             self.doNotRepaint = False
                             return
 
@@ -140,70 +140,30 @@ class Graph(QMainWindow):
         else:
             self.paintHorizontal(event, painter)
 
-    def paintVertical(self, event, painter): # Old version
-        print()
-        # # ----- Parents ----- *
-        # cnt = 0
-        # height = 0
-        # xFirst = ( ((self.boxNumMax - len(self.person["Parents"])) / 2)
-        #         * (self.boxWidth + self.boxOffset) + self.windowOffset )
-        # y = self.windowOffset
-
-        # for pid in self.person["Parents"]:
-        #     x = xFirst + cnt * (self.boxWidth + self.boxOffset)
-
-        #     if len(self.person["Parents"]) > 1 and cnt == 0:
-        #         x = x + self.boxOffset/2
-        #     elif len(self.person["Parents"]) > 1 and cnt != 0:
-        #         x = x - self.boxOffset/2
-
-        #     height = max(height,self.paintBox(painter, x, y, pid))
-        #     cnt = cnt + 1
-
-        # # ----- Siblings and me ----- *
-        # cnt = 0
-        # xFirst = ( ((self.boxNumMax - len(self.person["Siblings"])) / 2)
-        #         * (self.boxWidth + self.boxOffset) + self.windowOffset )
-        # y = y + height + self.boxOffset
-        # height = 0
-
-        # for pid in self.person["Siblings"]:
-        #     x = xFirst + cnt * (self.boxWidth + self.boxOffset)
-        #     if pid == self.rootPid:
-        #         self.xRootMitte = x + self.boxWidth/2
-        #     height = max(height, self.paintBox(painter, x, y, pid))
-        #     if len(self.person["Parents"]) > 0:
-        #         painter.drawLine(x + self.boxWidth / 2, y, self.xMitte, y - self.boxOffset)
-        #     cnt = cnt + 1
-
-        # # ----- Children ----- #
-        # cnt = 0
-        # xFirst = ( ((self.boxNumMax - len(self.person["Children"])) / 2)
-        #         * (self.boxWidth + self.boxOffset) + self.windowOffset )
-        # y = y + height + self.boxOffset
-
-        # for pid in self.person["Children"]:
-        #     x = xFirst + cnt * (self.boxWidth + self.boxOffset)
-        #     self.paintBox(painter, x, y, pid)
-        #     painter.drawLine(x + self.boxWidth / 2, y, self.xRootMitte, y - self.boxOffset)
-        #     cnt = cnt + 1
-
-        # painter.end()
-
     def paintHorizontal(self, event, painter): # Old version
         for pid in self.boxList:
             box = self.boxList[pid]
             self.paintBox(painter, pid)
             if box["x"] > self.windowOffset:
-                parents = self.db.getParentsOfPerson(pid)
-                newY = 0
-                for parent in parents:
-                    if parent in self.boxList:
-                        newY = self.boxList[parent]["y"]
-                        break
-                if newY > 0:
+                newYF = 0
+                newYM = 0
+                father = self.data.getFatherId(pid)
+                mother = self.data.getMotherId(pid)
+                
+                if father in self.boxList:
+                    newYF = self.boxList[father]["y"]
+                if mother in self.boxList:
+                    newYM = self.boxList[mother]["y"]
+                        
+                if newYF > 0 and newYM > 0 and self.boxList[mother]["relation"] == "Oma":
                     painter.drawLine(box["x"], box["y"] + self.shortBoxHeight / 2, 
-                                     box["x"] - self.boxOffset, newY + self.shortBoxHeight / 2)
+                                        box["x"] - self.boxOffset, newYF + self.shortBoxHeight)
+                elif newYF > 0:
+                    painter.drawLine(box["x"], box["y"] + self.shortBoxHeight / 2, 
+                                        box["x"] - self.boxOffset, newYF + self.shortBoxHeight / 2)
+                elif newYM > 0:
+                    painter.drawLine(box["x"], box["y"] + self.shortBoxHeight / 2, 
+                                        box["x"] - self.boxOffset, newYM + self.shortBoxHeight / 2)
 
         painter.end()
 
@@ -235,9 +195,9 @@ class Graph(QMainWindow):
         painter.setPen(self.fontColor)
 
         # 2 lines with the name
-        nameArr = self.db.getPersonName(pid)
+        ret, nameArr = self.data.getName(pid)
         painter.setFont(QFont(self.fontFace, self.fontSize, QFont.ExtraBold))
-        if len(nameArr) > 0:
+        if ret:
             if box["relation"] == "":
                 text = nameArr["firstname"]
             else:
@@ -251,23 +211,23 @@ class Graph(QMainWindow):
 
         # Birth
         line = line + 1
-        eventArr = self.db.getBirthData(pid)  # date - place 
+        ret, eventArr = self.data.getBirthData(pid)  # date - place 
         painter.setFont(QFont(self.fontFace, self.fontSize, QFont.Normal))
-        if len(eventArr) > 1:
+        if ret:
             painter.drawText(
                 x + self.margin,
                 y + line * self.lineHeight,
-                "* " + eventArr["birth_date"] + " " + eventArr["birth_place"],
+                "* " + eventArr["date"] + " " + eventArr["place"],
             )
 
         # Death
         line = line + 1
-        eventArr = self.db.getDeathData(pid)  # date - place - source
-        if len(eventArr) > 1:
+        ret, eventArr = self.data.getDeathData(pid)  # date - place - source
+        if ret:
             painter.drawText(
                 x + self.margin,
                 y + line * self.lineHeight,
-                "+ " + eventArr["death_date"] + " " + eventArr["death_place"],
+                "+ " + eventArr["date"] + " " + eventArr["place"],
             )
 
         # ---------------------- *
@@ -277,13 +237,13 @@ class Graph(QMainWindow):
         # Partner
         if box["partners"]:
             cnt = 0
-            for partner in box["partners"]:
-                partnerPid = partner["id"]
+            for partnerPid in box["partners"]:
                 cnt = cnt + 1
                 y2 = y + cnt * self.shortBoxHeight + 1
                 line = 1
                 
-                if partner["sex"] == "m":
+                ret, sex = self.data.getSex(partnerPid)
+                if ret and sex == "m":
                     painter.setBrush(QBrush(self.colorMan, Qt.SolidPattern))
                     painter.setPen(self.frameColorMan)
                 else:
@@ -294,38 +254,45 @@ class Graph(QMainWindow):
                 painter.setPen(self.partnerFontColor)
 
                 # Marriage
-                marrStruc = self.db.getMarriage(partner["fam_id"])
-                if marrStruc["id"] != "":
-                    text = "oo " + marrStruc["evt_date"] + " " + marrStruc["place"]
+                ret, fam = self.data.getFamilyForPair(pid,partnerPid)
+                ret, marrStruc = self.data.getMarriageForFam(fam)
+                if ret:
+                    text = "oo " + marrStruc["date"] + " " + marrStruc["place"]
                 else:
                     text = "oo"
                 painter.drawText( x + self.margin, y2 + line * self.lineHeight, text )
+                
                 # Name
-                line = line + 1
-                nameArr = self.db.getPersonName(partnerPid)
-                painter.setFont(QFont(self.fontFace, self.fontSize, QFont.ExtraBold))
-                painter.drawText(
-                    x + self.margin,
-                    y2 + line * self.lineHeight,
-                    nameArr["firstname"] + " " + nameArr["surname"],
-                )
+                ret, nameArr = self.data.getName(partnerPid)
+                if ret:
+                    line = line + 1
+                    painter.setFont(QFont(self.fontFace, self.fontSize, QFont.ExtraBold))
+                    painter.drawText(
+                        x + self.margin,
+                        y2 + line * self.lineHeight,
+                        nameArr["firstname"] + " " + nameArr["surname"],
+                    )
+                    
                 # Birth
-                line = line + 1
-                eventArr = self.db.getBirthData(partnerPid)  # date - place - source
-                painter.setFont(QFont(self.fontFace, self.fontSize, QFont.Normal))
-                painter.drawText(
-                    x + self.margin,
-                    y2 + line * self.lineHeight,
-                    "* " + eventArr["birth_date"] + " " + eventArr["birth_place"],
-                )
+                ret, eventArr = self.data.getBirthData(partnerPid)  # date - place - source
+                if ret:
+                    line = line + 1
+                    painter.setFont(QFont(self.fontFace, self.fontSize, QFont.Normal))
+                    painter.drawText(
+                        x + self.margin,
+                        y2 + line * self.lineHeight,
+                        "* " + eventArr["date"] + " " + eventArr["place"],
+                    )
+                    
                 # Death
-                line = line + 1
-                eventArr = self.db.getDeathData(partnerPid)  # date - place - source
-                painter.drawText(
-                    x + self.margin,
-                    y2 + line * self.lineHeight,
-                    "+ " + eventArr["death_date"] + " " + eventArr["death_place"],
-                )
+                ret, eventArr = self.data.getDeathData(partnerPid)  # date - place - source
+                if ret:
+                    line = line + 1
+                    painter.drawText(
+                        x + self.margin,
+                        y2 + line * self.lineHeight,
+                        "+ " + eventArr["date"] + " " + eventArr["place"],
+                    )
         painter.setPen(self.fontColor)
 
         # extra frame for setting this person as a central person
@@ -355,15 +322,15 @@ class Graph(QMainWindow):
         grandchildList    = {}
 
         # Parents
-        parentList = self.db.getParentsOfPerson(self.rootPid)
+        ret, parentList = self.data.getParentsList(self.rootPid)
         
         # Grandparents
         x =  self.windowOffset
         for pid in parentList:
-            list = self.db.getParentsOfPerson(pid)
+            ret, list = self.data.getParentsList(pid)
             for elem in list:
                 if elem not in grandparentList:
-                    sex = self.db.getSex(elem)
+                    ret, sex = self.data.getSex(elem)
                     if sex == "m":
                         grandparentList[elem] = {"x": x, "y": 0, "sex": sex, "relation": "Opa"}
                     else:
@@ -373,10 +340,10 @@ class Graph(QMainWindow):
         x = x + self.boxWidth + self.boxOffset
         for key in grandparentList:
             person = grandparentList[key]
-            list = self.db.getChildrenOfPerson(key)
+            ret, list = self.data.getChildren(key)
             for elem in list:
                 if elem not in parentsiblingList:
-                    sex = self.db.getSex(elem)
+                    ret, sex = self.data.getSex(elem)
                     if elem in parentList:
                         if sex == "m":
                             parentsiblingList[elem] = {"x": x, "y": 0, "sex": sex, "relation": "Vater"}
@@ -395,7 +362,7 @@ class Graph(QMainWindow):
         if len(grandparentList) == 0:
             for elem in parentList:
                 if elem not in parentsiblingList:
-                    sex = self.db.getSex(elem)
+                    ret, sex = self.data.getSex(elem)
                     if sex == "m":
                         parentsiblingList[elem] = {"x": x, "y": 0, "sex": sex, "relation": "Vater"}
                     else:
@@ -405,10 +372,10 @@ class Graph(QMainWindow):
         x = x + self.boxWidth + self.boxOffset
         for key in parentsiblingList:
             person = parentsiblingList[key]
-            list = self.db.getChildrenOfPerson(key)
+            ret, list = self.data.getChildren(key)
             for elem in list:
                 if elem not in cousinList:
-                    sex = self.db.getSex(elem)
+                    ret, sex = self.data.getSex(elem)
                     if elem == self.rootPid:
                         cousinList[elem] = {"x": x, "y": 0, "sex": sex, "relation": ""}
                     elif key in parentList:
@@ -427,17 +394,17 @@ class Graph(QMainWindow):
                     cousinList[elem]["mother"] = key
         # If no parents, then no siblings/cousins found - add myself manually
         if len(parentsiblingList) == 0:
-            sex = self.db.getSex(self.rootPid)
+            ret, sex = self.data.getSex(self.rootPid)
             cousinList[self.rootPid] = {"x": x, "y": 0, "sex": sex, "relation": ""}
             
         # Children and Nephews, Grancousins
         x = x + self.boxWidth + self.boxOffset
         for key in cousinList:
             person = cousinList[key]
-            list = self.db.getChildrenOfPerson(key)
+            ret, list = self.data.getChildren(key)
             for elem in list:
                 if elem not in childList:
-                    sex = self.db.getSex(elem)
+                    ret, sex = self.data.getSex(elem)
                     if key == self.rootPid:
                         if sex == "m":
                             childList[elem] = {"x": x, "y": 0, "sex": sex, "relation": "Sohn"}
@@ -465,10 +432,10 @@ class Graph(QMainWindow):
         x = x + self.boxWidth + self.boxOffset
         for key in childList:
             person = childList[key]
-            list = self.db.getChildrenOfPerson(key)
+            ret, list = self.data.getChildren(key)
             for elem in list:
                 if elem not in grandchildList:
-                    sex = self.db.getSex(elem)
+                    ret, sex = self.data.getSex(elem)
                     if person["relation"] == "Sohn" or person["relation"] == "Tochter":
                         if sex == "m":
                             grandchildList[elem] = {"x": x, "y": 0, "sex": sex, "relation": "Enkelsohn"}
@@ -489,31 +456,32 @@ class Graph(QMainWindow):
                 else:
                     grandchildList[elem]["mother"] = key
 
-        # Fill Boxes, Add Partners, Calculate yMax
+    # Fill Boxes, Add Partners, Calculate yMax
         y = self.windowOffset
-        for key in grandparentList:
+        for key in grandparentList: # Partners of Grandparents are ignored
             grandparentList[key]["y"] = y
-            grandparentList[key]["partners"] = self.db.getPartners(key)
-            if grandparentList[key]["partners"]:
-                for gp in grandparentList[key]["partners"]:
-                    if gp["id"] in grandparentList:
-                        # remove this partner in partner list
-                        grandparentList[key]["partners"].remove(gp)
-            # Are there still Partners?
-            if grandparentList[key]["partners"]:
-                y = y + self.boxOffset + (len(grandparentList[key]["partners"]) + 1) * self.shortBoxHeight          
-            else: 
-                y = y + self.boxOffset + self.shortBoxHeight    
+            grandparentList[key]["partners"] = []
+            # ret, grandparentList[key]["partners"] = self.data.getPartners(key)
+            # if ret:
+            #     for gp in grandparentList[key]["partners"]:
+            #         if gp in grandparentList:
+            #             # remove this partner in partner list
+            #             grandparentList[key]["partners"].remove(gp)
+            # # Are there still Partners?
+            # if grandparentList[key]["partners"]:
+            #     y = y + self.boxOffset + (len(grandparentList[key]["partners"]) + 1) * self.shortBoxHeight          
+            # else: 
+            y = y + self.shortBoxHeight # + self.boxOffset   
         yMax = y
         y1 = y
             
         y = self.windowOffset
         for key in parentsiblingList:
             parentsiblingList[key]["y"] = y
-            parentsiblingList[key]["partners"] = self.db.getPartners(key)
+            ret, parentsiblingList[key]["partners"] = self.data.getPartners(key)
             if parentsiblingList[key]["partners"]:
                 for gp in parentsiblingList[key]["partners"]:
-                    if gp["id"] in parentsiblingList:
+                    if gp in parentsiblingList:
                         # remove this partner in partner list
                         parentsiblingList[key]["partners"].remove(gp)
             # Are there still Partners?
@@ -526,7 +494,7 @@ class Graph(QMainWindow):
         y = self.windowOffset
         for key in cousinList:
             cousinList[key]["y"] = y
-            cousinList[key]["partners"] = self.db.getPartners(key)
+            ret, cousinList[key]["partners"] = self.data.getPartners(key)
             if cousinList[key]["partners"]:
                 y = y + self.boxOffset + (len(cousinList[key]["partners"]) + 1) * self.shortBoxHeight          
             else: y = y + self.boxOffset + self.shortBoxHeight    
@@ -536,7 +504,7 @@ class Graph(QMainWindow):
         y = self.windowOffset
         for key in childList:
             childList[key]["y"] = y
-            childList[key]["partners"] = self.db.getPartners(key)
+            ret, childList[key]["partners"] = self.data.getPartners(key)
             if childList[key]["partners"]:
                 y = y + self.boxOffset + (len(childList[key]["partners"]) + 1) * self.shortBoxHeight          
             else: y = y + self.boxOffset + self.shortBoxHeight
@@ -546,7 +514,7 @@ class Graph(QMainWindow):
         y = self.windowOffset
         for key in grandchildList:
             grandchildList[key]["y"] = y
-            grandchildList[key]["partners"] = self.db.getPartners(key)
+            ret, grandchildList[key]["partners"] = self.data.getPartners(key)
             if grandchildList[key]["partners"]:
                 y = y + self.boxOffset + (len(grandchildList[key]["partners"]) + 1) * self.shortBoxHeight          
             else: y = y + self.boxOffset + self.shortBoxHeight

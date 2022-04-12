@@ -6,3 +6,6 @@ __pycache__
 config.txt
 icons/Malen
 pip.exe*
+classes/DB.py.old
+logs/*
+.gitignore

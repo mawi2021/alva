@@ -2,13 +2,15 @@ from classes.Graph import Graph
 
 class GraphList():
     
-    def __init__(self, root):
+    def __init__(self, root, data):
         super(GraphList, self).__init__()
         self.root = root
+        self.data = data
+        
         self.list = []
         
     def addGraph(self,id):
-        graph = Graph(self.root)
+        graph = Graph(self.root, self.data)
         if id != "":
             graph.setPerson(id)
         self.list.append(graph)

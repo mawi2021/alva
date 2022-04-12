@@ -10,9 +10,12 @@ from classes.PersonListWidget import PersonListWidget
 from classes.PersonWidget import PersonWidget
 
 class MainWidget(QWidget):
-    def __init__(self, main):
+    def __init__(self, main, configData, data):
         super().__init__()
-        self.main = main
+        self.main       = main
+        self.configData = configData
+        self.data       = data
+        self.graphList  = ""
 
         # ----- Constants ----------------------------------------------------------------------- #
         # TODO: read values from config file
@@ -24,11 +27,11 @@ class MainWidget(QWidget):
         statusBgColorStr = 'background-color:white'
 
         # ----- Create Main Window Panels ------------------------------------------------------- #
-        self.listFrame = PersonListWidget(self.main)
+        self.listFrame = PersonListWidget(self.main, self.configData, self.data)
         self.listFrame.setContentsMargins(0,0,0,0)
         self.listFrame.refreshBackground()
 
-        self.persFrame = PersonWidget(self.main)
+        self.persFrame = PersonWidget(self.main, self.configData, self.data)
         self.persFrame.refreshBackground()
 
         statusFrame = QFrame()
@@ -51,3 +54,36 @@ class MainWidget(QWidget):
         self.layout = hbox
         self.setLayout(self.layout)
     
+    def setGraphList(self, graphList):
+        self.graphList = graphList
+    
+    def setPerson(self, id):
+        self.listFrame.setPerson(id)
+        self.persFrame.setPerson(id)
+        self.graphList.setPerson(id)
+        
+    def setPersonNoList(self, id):
+        self.persFrame.setPerson(id)
+        self.graphList.setPerson(id)
+        
+    def setPersonNoGraph(self, id):
+        self.listFrame.setPerson(id)
+        self.persFrame.setPerson(id)
+                
+    def addPerson(self):      
+        # Called by PersonWidget after pushing button #
+          
+        # Get new ID #
+        id = self.data.getNextPersonId()  
+        self.data.addPerson(id)
+        
+        # Add Perosn in PersonList #
+        self.listFrame.addPerson(id)
+        
+        # Set the new (empty) person having Focus #
+        self.setPerson(id)
+    
+    def clearWidgets(self):
+        self.listFrame.clearTable()
+        self.persFrame.clearPerson()
+        self.graphList.clear()
