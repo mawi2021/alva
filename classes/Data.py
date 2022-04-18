@@ -1313,6 +1313,13 @@ class Data():
                         children.append(elem)
             return True, children
         return False, []
+    def getComment(self, id):
+        ret, pers = self.getPerson(id)
+        if ret:
+            val = pers.get("comment","")
+            if val != "":
+                return True, val
+        return False, ""    
     def getCommentFather(self, id):
         ret, pers = self.getPerson(id)
         if ret:
@@ -1380,6 +1387,18 @@ class Data():
                     if idF != "":
                         return True, idF
         return False, ""
+    def getMarriageDate(self, id, idx):
+        ret, pers = self.getPerson(id)
+        if ret:
+            fams = pers.get("FAMS",[])
+            if len(fams) > idx:
+                fam = fams[idx]
+                ret, famObj = self.getFamily(fam)
+                if ret:
+                    marr = famObj.get("MARR")
+                    if marr != None:
+                        return marr.get("DATE","")
+        return ""
     def getMarriageForFam(self, fId):
         # called from Graph.py #
         obj = {}
@@ -1390,6 +1409,25 @@ class Data():
                 obj["place"] = fam["MARR"].get("PLAC","")
                 return True, obj
         return False, {}
+    def getMarriagePlace(self, id, idx):
+        ret, pers = self.getPerson(id)
+        if ret:
+            fams = pers.get("FAMS",[])
+            if len(fams) > idx:
+                fam = fams[idx]
+                ret, famObj = self.getFamily(fam)
+                if ret:
+                    marr = famObj.get("MARR")
+                    if marr != None:
+                        return marr.get("PLAC","")
+        return ""
+    def getMedia(self, id):
+        ret, pers = self.getPerson(id)
+        if ret:
+            val = pers.get("media","")
+            if val != "":
+                return True, val
+        return False, ""    
     def getMotherId(self, id):
         ret, pers = self.getPerson(id)
         if ret:
@@ -1444,6 +1482,57 @@ class Data():
         if id in self.helperNoteList:
             return True, self.jData["NOTE"][self.helperNoteList[id]]
         return False, {}    
+    def getOwnFamily(self, id):
+        objects = []
+        ret, pers = self.getPerson(id)
+        if ret:
+            fams = pers.get("FAMS",[])
+            for fam in fams:
+                obj = {}
+                ret, famDetails = self.getFamily(fam)
+                if not ret: continue
+                
+                # ID #
+                obj["id"] = fam
+                
+                # Marriage date and place #
+                marr = famDetails.get("MARR")
+                if marr != None:
+                    obj["date"]  = marr.get("DATE","")
+                    obj["place"] = marr.get("PLAC","")
+                    
+                # Partner #
+                husb = famDetails.get("HUSB","")
+                wife = famDetails.get("WIFE","")
+                if husb == id and wife != "":
+                    obj["partnerID"] = wife
+                elif wife == id and husb != "":
+                    obj["partnerID"] = husb
+                    
+                # Children #
+                chil = famDetails.get("CHIL")
+                if chil != None:
+                    obj["childrenID"] = chil
+                    
+                # Comments #
+                comm = famDetails.get("comment","")
+                commHe = famDetails.get("comment_father","")
+                commShe = famDetails.get("comment_mother","")
+                if commHe != "":
+                    if comm != "":
+                        comm += "\nEr: " + commHe
+                    else:
+                        comm = "Er: " + commHe
+                if commShe != "":
+                    if comm != "":
+                        comm += "\nSie: " + commShe
+                    else:
+                        comm = "Sie: " + commShe
+                if comm != "":
+                    obj["comment"] = comm
+                    
+                objects.append(obj)
+        return objects
     def getParentsDict(self, id):
         # called from PersonWidget + Graph.py #
         obj = {}
@@ -1566,24 +1655,36 @@ class Data():
         
         # Parameter: filled either obj or id #
         if "NAME" in obj:
+            line = "<b>"
             if "GIVN" in obj["NAME"]:
                 line = line + obj["NAME"]["GIVN"] + " "
             if "SURN" in obj["NAME"]:
                 line = line + obj["NAME"]["SURN"] + " "
+            line += "</b>"
         if "BIRT" in obj:
-            line = line + "geb. "
+            line = line + "/ geb. "
             if "DATE" in obj["BIRT"]:
                 line = line + obj["BIRT"]["DATE"] + " "
             if "PLAC" in obj["BIRT"]:
                 line = line + " in " + obj["BIRT"]["PLAC"] + " "
         if "DEAT" in obj:
-            line = line + "gest. "
+            line = line + "/ gest. "
             if "DATE" in obj["DEAT"]:
                 line = line + obj["DEAT"]["DATE"] + " "
             if "PLAC" in obj["DEAT"]:
                 line = line + "in " + obj["DEAT"]["PLAC"] + " "
                 
         return line
+    def getRelationComment(self, id, idx):
+        ret, pers = self.getPerson(id)
+        if ret:
+            fams = pers.get("FAMS",[])
+            if len(fams) > idx:
+                famID = fams[idx]
+                ret, fam = self.getFamily(famID)
+                if ret:
+                    return fam.get("comment","")
+        return ()
     def getSex(self, id):
         # called from Graph.py #
         ret, pers = self.getPerson(id)
@@ -1596,20 +1697,6 @@ class Data():
         ret, pers = self.getPerson(id)
         if ret:
             val = pers.get("url","")
-            if val != "":
-                return True, val
-        return False, ""    
-    def getComment(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            val = pers.get("comment","")
-            if val != "":
-                return True, val
-        return False, ""    
-    def getMedia(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            val = pers.get("media","")
             if val != "":
                 return True, val
         return False, ""    
@@ -1644,6 +1731,15 @@ class Data():
         if not "BIRT" in self.jData["INDI"][idx]:
             self.jData["INDI"][idx]["BIRT"] = {}
         self.jData["INDI"][idx]["BIRT"]["PLAC"] = value
+    def setComment(self, id, value):
+        idx = self.helperPersList.get(id,"")
+        if idx == "": return
+        
+        # Logging #
+        self._addToLog(id, "comment", value, "+")
+        
+        # json Data #
+        self.jData["INDI"][idx]["comment"] = value               
     def setCommentFather(self, id, value):
         idx = self.helperPersList.get(id,"")
         if idx == "": return
@@ -1695,6 +1791,39 @@ class Data():
         if not "NAME" in self.jData["INDI"][idx]:
             self.jData["INDI"][idx]["NAME"] = {}
         self.jData["INDI"][idx]["NAME"]["GIVN"] = value
+    def setMarriageDate(self, id, idx, text):
+        ret, pers = self.getPerson(id)
+        if ret:
+            fams = pers.get("FAMS",[])
+            if len(fams) > idx:
+                famID = fams[idx]
+                ret, fam = self.getFamily(famID)
+                if ret:
+                    if fam.get("MARR") == None:
+                        fam["MARR"] = {}
+                    fam["MARR"]["DATE"] = text
+                    self._addToFamLog(famID,"MARR>DATE",text,"+")
+    def setMarriagePlace(self, id, idx, text):
+        ret, pers = self.getPerson(id)
+        if ret:
+            fams = pers.get("FAMS",[])
+            if len(fams) > idx:
+                famID = fams[idx]
+                ret, fam = self.getFamily(famID)
+                if ret:
+                    if fam.get("MARR") == None:
+                        fam["MARR"] = {}
+                    fam["MARR"]["PLAC"] = text
+                    self._addToFamLog(famID,"MARR>PLAC",text,"+")
+    def setMedia(self, id, value):
+        idx = self.helperPersList.get(id,"")
+        if idx == "": return
+        
+        # Logging #
+        self._addToLog(id, "media", value, "+")
+        
+        # json Data #
+        self.jData["INDI"][idx]["media"] = value               
     def setNote(self, persId, noteType, value):
         ret, obj = self.getPerson(persId)
         if not ret: return
@@ -1748,24 +1877,16 @@ class Data():
         
         # json Data #
         self.jData["INDI"][idx]["url"] = value               
-    def setComment(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "comment", value, "+")
-        
-        # json Data #
-        self.jData["INDI"][idx]["comment"] = value               
-    def setMedia(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "media", value, "+")
-        
-        # json Data #
-        self.jData["INDI"][idx]["media"] = value               
+    def setRelationComment(self, id, idx, text):
+        ret, pers = self.getPerson(id)
+        if ret:
+            fams = pers.get("FAMS",[])
+            if len(fams) > idx:
+                famID = fams[idx]
+                ret, fam = self.getFamily(famID)
+                if ret:
+                    fam["comment"] = text
+                    self._addToFamLog(famID,"comment",text,"+")
     def setSource(self, id, value):
         idx = self.helperPersList.get(id,"")
         if idx == "": return
@@ -1822,46 +1943,7 @@ class Data():
         
         # Remove Parent #
         if idParent == "":
-            # Remove FAMC from child
-            fam = obj.pop("FAMC","") # remove key if exists
-            self._addToLog(id, "FAMC", "", "-")
-            
-            if fam != "":
-                ret, famObj = self.getFamily(fam)
-                if ret:
-                    pCnt = 0
-                    
-                    # Do mother and father exist? #
-                    fatherId = famObj.get("HUSB","")
-                    if fatherId != "":
-                        pCnt = pCnt + 1
-                    motherId = famObj.get("WIFE","")
-                    if motherId != "":
-                        pCnt = pCnt + 1
-                    
-                    # remove child from family #
-                    children = famObj.get("CHIL")
-                    if children != None:
-                        children.remove(id)
-                        self._addToFamLog(fam, "CHIL", id, "-")
-                        if len(children) == 0:
-                            famObj.pop("CHIL","")
-                            self._addToFamLog(fam, "CHIL", "", "-")
-                    
-                    # if family consists of HUSB and/or WIFE only, then remove Family #
-                    pCnt = pCnt + 1 # for "id" of familiy
-                    if len(famObj) == pCnt:
-                        self._removeFamily(fam)
-                    
-                    # Assign person to the other part of parents
-                    if fatherId != "" and motherId != "":
-                        if who == "HUSB":
-                            self.assignParent(id, motherId, "WIFE")
-                        elif who == "WIFE":
-                            self.assignParent(id, fatherId, "HUSB")
-                    
-                    return True
-            return False                
+            return self.unassignParent(self, id, who)
             
         # Add Parent #
         ret, objParent = self.getPerson(idParent)
@@ -1907,7 +1989,48 @@ class Data():
                                 self._assignParent(obj, objParent, fam2Obj, who)
                                     
                 else: # no who in famObj
-                    self._assignParent(obj, objParent, famObj, who)
+                    # Is there a family with this mother and father? #
+                    otherPartner = famObj.get(partnerWho,"")
+                    ret, fam2 = self.getFamilyForPair(idParent, otherPartner)
+                    if ret:
+                        ret, famObj2 = self.getFamily(fam2)
+                        if ret:
+                            if "CHIL" not in famObj2:
+                                famObj2["CHIL"] = []
+                            famObj2["CHIL"].append(id)
+                            self._addToFamLog(fam2, "CHIL", id, "+")
+                            
+                            if "FAMC" in obj:
+                                # Delete child from other family #
+                                fam3 = obj["FAMC"]
+                                ret, famObj3 = self.getFamily(fam3)
+                                if ret:
+                                    children = famObj3.get("CHIL")
+                                    if children != None:
+                                        if id in children:
+                                            children.remove(id)
+                                        self._addToFamLog(fam3, "CHIL", id, "-")
+                                        if len(children) == 0:
+                                            famObj3.pop("CHIL","")
+                                            self._addToFamLog(fam3, "CHIL", "", "-")
+                                            
+                                            # Delete whole family, if only WIFE and/or HUSB entries
+                                            pCnt = 0
+                                            # Do mother and father exist? #
+                                            fatherId3 = famObj3.get("HUSB","")
+                                            if fatherId3 != "":
+                                                pCnt = pCnt + 1
+                                            motherId3 = famObj3.get("WIFE","")
+                                            if motherId3 != "":
+                                                pCnt = pCnt + 1
+                                            pCnt = pCnt + 1 # for "id" of familiy
+                                            if len(famObj) == pCnt:
+                                                self._removeFamily(fam)                                            
+                                
+                            obj["FAMC"] = fam2
+                            self._addToLog(id, "FAMC", fam2, "+")
+                    else:
+                        self._assignParent(obj, objParent, famObj, who)
             
             else: # family for id >> CHIL does not exist
                 famId = self.getNextFamId()
@@ -1963,7 +2086,6 @@ class Data():
             self._addToLog(parentObj["id"], "FAMS", famObj["id"], "+")
     def _fillHelperLists(self):
         self.helperPersList = {}
-        self.helperFamList  = {}
         self.helperNoteList = {}
         
         cnt = 0        
@@ -1972,17 +2094,21 @@ class Data():
                 self.helperPersList[obj.get("id")] = cnt
                 cnt = cnt + 1
 
-        cnt = 0        
-        if "FAM" in self.jData:
-            for obj in self.jData["FAM"]:
-                self.helperFamList[obj.get("id")] = cnt
-                cnt = cnt + 1
+        self.fillHelperFamList()
 
         cnt = 0        
         if "NOTE" in self.jData:
             for obj in self.jData["NOTE"]:
                 self.helperNoteList[obj.get("id")] = cnt
                 cnt = cnt + 1
+    def fillHelperFamList(self):
+        self.helperFamList  = {}
+
+        cnt = 0        
+        if "FAM" in self.jData:
+            for obj in self.jData["FAM"]:
+                self.helperFamList[obj.get("id")] = cnt
+                cnt = cnt + 1        
     def onExit(self):
         # Called from main.py #
         return self._updateFromLog(1)
@@ -1998,11 +2124,7 @@ class Data():
         # remove fam from jData["FAM"]
         del self.jData["FAM"][idx]
         self._addToFamLog(fam, "FAM", "", "-")
-        i = 0
-        self.helperFamList = {}
-        for obj in self.jData["FAM"]:
-            self.helperFamList[i] = obj.get("id","")
-            i = i + 1 
+        self.fillHelperFamList()
         
         # remove "FAMS" from jDATA["INDI"] for both parents
         ret, pers = self.getPerson(idMother)
@@ -2068,6 +2190,49 @@ class Data():
             tabData.append(line)
             
         return tabData
+    def unassignParent(self, childID, who):
+        childObj = self.getPerson()
+        
+        # Remove FAMC from child
+        fam = childObj.pop("FAMC","") # remove key if exists
+        self._addToLog(childID, "FAMC", "", "-")
+        
+        if fam != "":
+            ret, famObj = self.getFamily(fam)
+            if ret:
+                pCnt = 0
+                
+                # Do mother and father exist? #
+                fatherId = famObj.get("HUSB","")
+                if fatherId != "":
+                    pCnt = pCnt + 1
+                motherId = famObj.get("WIFE","")
+                if motherId != "":
+                    pCnt = pCnt + 1
+                
+                # remove child from family #
+                children = famObj.get("CHIL")
+                if children != None:
+                    children.remove(id)
+                    self._addToFamLog(fam, "CHIL", id, "-")
+                    if len(children) == 0:
+                        famObj.pop("CHIL","")
+                        self._addToFamLog(fam, "CHIL", "", "-")
+                
+                # if family consists of HUSB and/or WIFE only, then remove Family #
+                pCnt = pCnt + 1 # for "id" of familiy
+                if len(famObj) == pCnt:
+                    self._removeFamily(fam)
+                
+                # Assign person to the other part of parents
+                if fatherId != "" and motherId != "":
+                    if who == "HUSB":
+                        self.assignParent(id, motherId, "WIFE")
+                    elif who == "WIFE":
+                        self.assignParent(id, fatherId, "HUSB")
+                
+                return True
+        return False                
     def updatePersValue(self,objectType,id,field,value):
         # Called from PersonListWidget.py #
         
