@@ -3,7 +3,7 @@
 
 from PyQt5.QtWidgets import QWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QAbstractItemView
 from PyQt5.QtGui import QColor
-from PyQt5 import Qt
+from PyQt5.QtCore import Qt
 
 class PersonListWidget(QWidget):
 
@@ -13,45 +13,107 @@ class PersonListWidget(QWidget):
         self.configData = configData
         self.data       = data
         
-        self.initUI()
-        self.bgColorHighlight = QColor(255, 128, 128)
-        self.bgColorNormal    = QColor(255,255,255) #255, 254, 235) = hellgelb
+        self.bgColorHighlight = QColor(237, 235, 194) # = hellgelb
+        self.bgColorNormal    = QColor(255, 255, 255) 
         self.bgColorNormalCSS = 'background-color:rgb(255, 255, 255)'
+        self.bgColorTableHead = QColor(128, 255, 255) # = hell-türkis
         self.highlightedRows = []
         self.sort = {"col": 0, "asc": True}
-        
+
+        self.initUI()        
     def initUI(self):
         self.tableWidget = QTableWidget()
         self.tableWidget.setRowCount(0)
         
         fields = self.main.config.jData["personListFields"]
         self.tableWidget.setColumnCount(len(fields))
-        fieldNames = []
+        cnt = 0
         for obj in fields:
-            fieldNames.append(fields[obj])
-        self.tableWidget.setHorizontalHeaderLabels(fieldNames)
+            headerItem = QTableWidgetItem(fields[obj])
+            #headerItem.setBackground(self.bgColorTableHead)
+            self.tableWidget.setHorizontalHeaderItem(cnt,headerItem)
+            cnt += 1
+            
+        stylesheet = "::section{background-color:rgb(128,255,255);padding:8px;font-weight:bold;font-size:12px;border-top:1px solid gray;border-bottom:1px solid gray;}"
+        self.tableWidget.horizontalHeader().setStyleSheet(stylesheet)
         
         self.tableWidget.setSortingEnabled(True)
         self.tableWidget.horizontalHeader().setSortIndicatorShown( True )
         self.tableWidget.verticalHeader().setVisible(False)
 
         # Signals #
-        self.tableWidget.currentCellChanged.connect(self.onCurrentCellChanged)
-        self.tableWidget.cellChanged.connect(self.onChange)
+        self.tableWidget.currentCellChanged.connect(self._onCurrentCellChanged)
+        self.tableWidget.cellChanged.connect(self._onChange)
+        self.tableWidget.cellClicked.connect(self._onCellClicked)
 
         # Add box layout, add table to box layout and add box layout to widget
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.tableWidget) 
         self.setLayout(self.layout) 
+    
+    def addPerson(self,id):
+        data = self.data.getPersonForTable(id)
+        self.addTableLine(data)        
+    def addTableLine(self,data):
+        cnt = self.tableWidget.rowCount()
+        self.tableWidget.insertRow(cnt)
 
-    def onCurrentCellChanged(self,row,col):
+        for i in range(len(data)):
+            self.tableWidget.setItem(cnt, i, QTableWidgetItem(data[i]))
+    def clearTable(self):
+        self.tableWidget.clearContents()
+        self.tableWidget.setRowCount(0)
+    def fillTable(self,dataArr):
+        self.tableWidget.clearContents()
+
+        cnt = len(dataArr)
+        self.tableWidget.setRowCount(cnt)
+
+        for i in range(cnt):
+            line = dataArr[i]
+            for j in range(len(line)):
+                self.tableWidget.setItem(i, j, QTableWidgetItem(line[j]))
+    def refreshBackground(self):
+        self.setStyleSheet(self.bgColorNormalCSS + ';margin:0px;padding:0px;border:0px;')
+    def setPerson(self,id):
+        if id == "": return
+        
+        newRow = 0
+        items = self.tableWidget.findItems(id, Qt.MatchExactly)
+        for item in items:
+            if item.column() == 0:
+                newRow = item.row()
+                self.tableWidget.scrollToItem(item, QAbstractItemView.PositionAtCenter)
+                break
+
+        # Un-Highlight formerly highlighted Rows #
+        for row in self.highlightedRows:
+            for col in range(self.tableWidget.columnCount()):
+                self.tableWidget.item(row,col).setBackground(self.bgColorNormal)
+        self.highlightedRows = []
+
+        # Highlight selected Row #
+        for col in range(self.tableWidget.columnCount()):
+            self.tableWidget.item(newRow,col).setBackground(self.bgColorHighlight)
+        self.highlightedRows.append(newRow)
+    def updateTableHighlightedRow(self,data):
+        # Called from PersonWidget.py #
+        for row in self.highlightedRows:
+            for i in range(len(data)):
+                # Update each column content #
+                self.tableWidget.setItem(row, i, QTableWidgetItem(data[i]))   
+    def _onCellClicked(self, row, col):
+        for selItem in self.tableWidget.selectedItems():
+            id = self.tableWidget.item(selItem.row(),0).text()
+            self.main.widget.setPerson(id)
+            return # take one row only into cosideration for each single-click event #
+    def _onCurrentCellChanged(self,row,col):
         # is called when navigating in the table via arrow keys #
         for selItem in self.tableWidget.selectedItems():
             id = self.tableWidget.item(selItem.row(),0).text()
             self.main.widget.setPerson(id)
             return # take one row only into cosideration for each double-click event #
-        
-    def onChange(self):
+    def _onChange(self):
         # is called when ending editing of a call by enter or tab (= leaving a changed cell) #
         # When changing the color of a cell, this routine is called, too - be aware of possible
         # endless loops!
@@ -72,65 +134,3 @@ class PersonListWidget(QWidget):
             
             # Update Person Details
             self.main.widget.setPersonNoList(id)
-    
-    def addPerson(self,id):
-        data = self.data.getPersonForTable(id)
-        self.addTableLine(data)        
- 
-    def setPerson(self,id):
-        if id == "": return
-
-        # Un-Highlight formerly highlighted Rows #
-        for row in self.highlightedRows:
-            item1 = self.tableWidget.item(row,0)
-            if item1:
-                item1.setBackground(self.bgColorNormal)
-        self.highlightedRows = []
-
-        # Highlight selected Row #
-        items = self.tableWidget.findItems(id,Qt.Qt.MatchExactly)
-        for item in items:
-            row = item.row()
-            self.highlightedRows.append(row)
-            item.setBackground(self.bgColorHighlight)
-
-            # highlight first column in table #
-            item2 = self.tableWidget.item(row,0) 
-            if item2:
-                item2.setBackground(self.bgColorHighlight)
-
-        # Scroll to highlighted item #
-        if len(items) > 0:
-            self.tableWidget.scrollToItem(item, QAbstractItemView.PositionAtCenter)
-
-    def refreshBackground(self):
-        self.setStyleSheet(self.bgColorNormalCSS + ';margin:0px;padding:0px;border:0px;')
-
-    def fillTable(self,dataArr):
-        self.tableWidget.clearContents()
-
-        cnt = len(dataArr)
-        self.tableWidget.setRowCount(cnt)
-
-        for i in range(cnt):
-            line = dataArr[i]
-            for j in range(len(line)):
-                self.tableWidget.setItem(i, j, QTableWidgetItem(line[j]))
-
-    def updateTableHighlightedRow(self,data):
-        # Called from PersonWidget.py #
-        for row in self.highlightedRows:
-            for i in range(len(data)):
-                # Update each column content #
-                self.tableWidget.setItem(row, i, QTableWidgetItem(data[i]))   
-
-    def addTableLine(self,data):
-        cnt = self.tableWidget.rowCount()
-        self.tableWidget.insertRow(cnt)
-
-        for i in range(len(data)):
-            self.tableWidget.setItem(cnt, i, QTableWidgetItem(data[i]))
-
-    def clearTable(self):
-        self.tableWidget.clearContents()
-        self.tableWidget.setRowCount(0)

@@ -8,6 +8,8 @@ import json
 import pandas
 import time
 
+# TODO: zu allen Log-Calls (z.B. self._addToLog()) Setter schreiben 
+
 class Data():
 
     def __init__(self, main, configData):
@@ -1160,8 +1162,9 @@ class Data():
                                 self.jData["INDI"].append({"id": val})
                                 self.helperPersList[id] = idx
                                 continue
-                                
-                            self.jData["INDI"], self.jData["INDI"][idx] = self._saveFromLogLine( \
+                            
+                            # self.jData["INDI"], self.jData["INDI"][idx] = self._saveFromLogLine( \    
+                            self.jData["INDI"] = self._saveFromLogLine( \
                                     fields[2], self.jData["INDI"], self.jData["INDI"][idx], \
                                     self.helperPersList, col, val, mode 
                                 )
@@ -1178,7 +1181,8 @@ class Data():
                                 self.helperFamList[id] = idx
                                 continue
 
-                            self.jData["FAM"], self.jData["FAM"][idx] = self._saveFromLogLine( \
+                            # self.jData["FAM"], self.jData["FAM"][idx] = self._saveFromLogLine( \
+                            self.jData["FAM"] = self._saveFromLogLine( \
                                     fields[2], self.jData["FAM"], self.jData["FAM"][idx], \
                                     self.helperPersList, col, val, mode 
                                 )
@@ -1195,7 +1199,8 @@ class Data():
                                 self.helperNoteList[id] = idx
                                 continue
 
-                            self.jData["NOTE"], self.jData["NOTE"][idx] = self._saveFromLogLine( \
+                            # self.jData["NOTE"], self.jData["NOTE"][idx] = self._saveFromLogLine( \
+                            self.jData["NOTE"] = self._saveFromLogLine( \
                                     fields[2], self.jData["NOTE"], self.jData["NOTE"][idx], \
                                     self.helperNoteList, col, val, mode 
                                 )                        
@@ -1222,12 +1227,13 @@ class Data():
                 if ( objType == "INDI" and col == "INDI") or \
                    ( objType == "FAM" and col == "FAM") or \
                    ( objType == "NOTE" and col == "NOTE"): 
-                    del jData
+                    jDataList.remove(jData)
                     i = 0
                     idxList = {}
                     for obj in jDataList: 
                         idxList[i] = obj.get("id","")
                         i = i + 1 
+                    return jDataList
                         
                 # List Object #
                 elif isinstance(jData[col], list):
@@ -1251,7 +1257,7 @@ class Data():
             elif mode == "-":
                 jData[field1][field2].remove(val)                
             
-        return jDataList, jData
+        return jDataList #, jData
     def _saveJData(self):
         # Save current data #
         filename = self.configData["projectDir"] + "/" + self.configData["currProject"] + ".json"
@@ -1367,16 +1373,16 @@ class Data():
     def getFamilyForPair(self, pId1, pId2):
         # called from Graph.py #
         ret, pers1 = self.getPerson(pId1)
-        if not ret: return False, ""
+        if not ret: return ""
         ret, pers2 = self.getPerson(pId2)
-        if not ret: return False, ""
+        if not ret: return ""
         
         fams1 = pers1.get("FAMS",[])
         fams2 = pers2.get("FAMS",[])
         for fam in fams1:
             if fam in fams2:
-                return True, fam
-        return False, ""
+                return fam
+        return ""
     def getFatherId(self, id):
         ret, pers = self.getPerson(id)
         if ret:
@@ -1555,22 +1561,15 @@ class Data():
                             obj["comment_mother"] = nameDic["firstname"] + " " + nameDic["surname"]
                     return True, obj
         return False, {}    
-    def getParentsList(self, id):
+    def getParentsIDs(self, id):
         # called from Graph.py #
-        parents = []
-        
         ret, pers = self.getPerson(id)
         if ret:
             if "FAMC" in pers:
                 ret, fam = self.getFamily(pers["FAMC"])
                 if ret:
-                    father = fam.get("HUSB")
-                    if father != None: parents.append(father)
-                    mother = fam.get("WIFE")
-                    if mother != None: parents.append(mother)
-                    if len(parents) > 0:
-                        return True, parents
-        return False, []
+                    return fam.get("HUSB",""), fam.get("WIFE","")
+        return "", ""
     def getPartners(self, id):
         # called from Graph.py #
         partners = []
@@ -1780,6 +1779,71 @@ class Data():
         if not "DEAT" in self.jData["INDI"][idx]:
             self.jData["INDI"][idx]["DEAT"] = {}
         self.jData["INDI"][idx]["DEAT"]["PLAC"] = value
+    def setFamilyHusband(self, famID, fatherID):
+        ret, famObj = self.getFamily(famID)
+        if not ret: 
+            print("Familie " + str(famID) + " existiert nicht")
+            return
+        
+        ret, fatherObj = self.getPerson(fatherID)
+        if not ret: 
+            print("Vater " + str(fatherID) + " existiert nicht")
+            return
+                
+        husb = famObj.get("HUSB","")
+        if husb != fatherID:
+            famObj["HUSB"] = fatherID
+            self._addToFamLog(famID, "HUSB", fatherID, "+")       
+
+        if not "FAMS" in fatherObj:
+            fatherObj["FAMS"] = []
+            
+        if famID not in fatherObj["FAMS"]:
+            fatherObj["FAMS"].append(famID)
+            self._addToLog(fatherID, "FAMS", famID, "+")        
+    def setFamilyWife(self, famID, motherID):
+        ret, famObj = self.getFamily(famID)
+        if not ret: 
+            print("Familie " + str(famID) + " existiert nicht")
+            return
+        
+        ret, motherObj = self.getPerson(motherID)
+        if not ret: 
+            print("Mutter " + str(motherID) + " existiert nicht")
+            return
+                
+        wife = famObj.get("WIFE","")
+        if wife != motherID:
+            famObj["WIFE"] = motherID
+            self._addToFamLog(famID, "WIFE", motherID, "+")       
+
+        if not "FAMS" in motherObj:
+            motherObj["FAMS"] = []
+            
+        if famID not in motherObj["FAMS"]:
+            motherObj["FAMS"].append(famID)
+            self._addToLog(motherID, "FAMS", famID, "+")        
+    def setFamilyChild(self, famID, childID):
+        # Adds entries: INDI > FAMC and FAMS > CHILD #
+        ret, famObj = self.getFamily(famID)
+        if not ret: 
+            print("Familie " + str(famID) + " existiert nicht")
+            return
+        
+        ret, childObj = self.getPerson(childID)
+        if not ret: 
+            print("Kind " + str(childID) + " existiert nicht")
+            return
+
+        if not "CHIL" in famObj:
+            famObj["CHIL"] = []
+            
+        if childID not in famObj["CHIL"]:
+            famObj["CHIL"].append(childID)
+            self._addToFamLog(famID, "CHIL", childID, "+")       
+
+        childObj["FAMC"] = famID
+        self._addToLog(childID, "FAMC", famID, "+")        
     def setFirstname(self, id, value):
         idx = self.helperPersList.get(id,"")
         if idx == "": return
@@ -1898,18 +1962,20 @@ class Data():
         self.jData["INDI"][idx]["source"] = value               
                 
     # ----- Others ----- #
-    def addFamily(self,fId):
-        # Called from MainWidget.py #
+    def _addFamily(self):
+        famID = self.getNextFamId()
 
         # Logging #
-        self._addToFamLog(fId, "id", fId, "+")
+        self._addToFamLog(famID, "id", famID, "+")
         
         if self.jData.get("FAM") == None:
             self.jData["FAM"] = []
             
         # fill data and helper #
-        self.jData["FAM"].append({"id":fId})
-        self.helperFamList[fId] = len(self.jData["FAM"]) - 1 
+        self.jData["FAM"].append({"id": famID})
+        self.helperFamList[famID] = len(self.jData["FAM"]) - 1 
+        
+        return famID
     def addPerson(self,id):
         # Called from MainWidget.py #
 
@@ -1922,168 +1988,108 @@ class Data():
         # fill data and helper #
         self.jData["INDI"].append({"id":id})
         self.helperPersList[id] = len(self.jData["INDI"]) - 1 
-    def assignParent(self, id, idParent, who):
+    def assignParent(self, childID, parentID, who):
         # Called from PersonWidget.py #
-        
         # who = "WIFE" for mother and "HUSB" for father
-        
-        # FAM >> WIFE / HUSB for idParent
-        # FAM >> CHIL for id
-        # INDI >> FAMC for id
-        # INDI >> FAMS for idParent
-
-        if who == "WIFE": 
-            partnerWho = "HUSB"
-        else:
-            partnerWho = "WIFE"
             
-        # FAM >> CHIL for id
-        ret, obj = self.getPerson(id)
-        if not ret: return False
+        # CHECKS: does child exist? #
+        ret, childObj = self.getPerson(childID)
+        if not ret: return 
         
         # Remove Parent #
-        if idParent == "":
-            return self.unassignParent(self, id, who)
+        if parentID == "":
+            self.unassignParent(self, childID, who)
+            return
             
-        # Add Parent #
-        ret, objParent = self.getPerson(idParent)
-        if not ret: return False
+        # CHECKS: does parent exist?  #
+        ret, parentObj = self.getPerson(parentID)
+        if not ret: return 
 
-        if not "FAM" in self.jData:
-            self.jData["FAM"] = []
+        famID = ""
+        otherParent = ""
+        if "FAMC" in childObj:
+            # Get other Partner and remember #
+            if who == "HUSB":
+                ret, otherParent = self.getMotherId(childID)
+            else:
+                ret, otherParent = self.getFatherId(childID)
+                
+            self.removeChildFromFamily(childID)
             
-        if "FAMC" in obj:
-            # I am child in any family
-            fam = obj["FAMC"]
-            ret, famObj = self.getFamily(fam)
-            if ret:
-                if who in famObj:
-                    if famObj[who] == idParent:
-                        # id - mother - assignment already done
-                        return True
-                    else:
-                        # other mother assignment => delete child from family
-                        if "CHIL" in famObj:
-                            if id in famObj["CHIL"]:
-                                if id in famObj["CHIL"]:
-                                    famObj["CHIL"].remove(id)
-                                    self._addToFamLog(famObj["id"], "CHIL", id, "-")
-                                    
-                        # is there a family with this mother and no father?
-                        found = False
-                        if "FAMS" in objParent:
-                            for famId in objParent["FAMS"]:
-                                ret, fam2Obj = self.getFamily(famId)
-                                if ret:
-                                    if fam2Obj.get(partnerWho,"") == "":
-                                        self._assignParent(obj, objParent, fam2Obj, who)
-                                        found = True
-                                        break
-                        
-                        if not found:
-                            # Add new family #
-                            famId = self.getNextFamId()
-                            self.addFamily(famId)
-                            ret, fam2Obj = self.getFamily(famId)
-                            if ret:
-                                self._assignParent(obj, objParent, fam2Obj, who)
-                                    
-                else: # no who in famObj
-                    # Is there a family with this mother and father? #
-                    otherPartner = famObj.get(partnerWho,"")
-                    ret, fam2 = self.getFamilyForPair(idParent, otherPartner)
-                    if ret:
-                        ret, famObj2 = self.getFamily(fam2)
-                        if ret:
-                            if "CHIL" not in famObj2:
-                                famObj2["CHIL"] = []
-                            famObj2["CHIL"].append(id)
-                            self._addToFamLog(fam2, "CHIL", id, "+")
-                            
-                            if "FAMC" in obj:
-                                # Delete child from other family #
-                                fam3 = obj["FAMC"]
-                                ret, famObj3 = self.getFamily(fam3)
-                                if ret:
-                                    children = famObj3.get("CHIL")
-                                    if children != None:
-                                        if id in children:
-                                            children.remove(id)
-                                        self._addToFamLog(fam3, "CHIL", id, "-")
-                                        if len(children) == 0:
-                                            famObj3.pop("CHIL","")
-                                            self._addToFamLog(fam3, "CHIL", "", "-")
-                                            
-                                            # Delete whole family, if only WIFE and/or HUSB entries
-                                            pCnt = 0
-                                            # Do mother and father exist? #
-                                            fatherId3 = famObj3.get("HUSB","")
-                                            if fatherId3 != "":
-                                                pCnt = pCnt + 1
-                                            motherId3 = famObj3.get("WIFE","")
-                                            if motherId3 != "":
-                                                pCnt = pCnt + 1
-                                            pCnt = pCnt + 1 # for "id" of familiy
-                                            if len(famObj) == pCnt:
-                                                self._removeFamily(fam)                                            
-                                
-                            obj["FAMC"] = fam2
-                            self._addToLog(id, "FAMC", fam2, "+")
-                    else:
-                        self._assignParent(obj, objParent, famObj, who)
+            if otherParent != "":
+                famID = self.getFamilyForPair(parentID, otherParent)
             
-            else: # family for id >> CHIL does not exist
-                famId = self.getNextFamId()
-                self.addFamily(famId)
-                ret, fam2Obj = self.getFamily(famId)
-                if ret:
-                    self._assignParent(obj, objParent, fam2Obj, who)
-                        
-        else: # no FAMC entry in id data
-            # is there a family with this mother and no father?
+        if famID == "":
+            # is there a family with this parent and no partner?
             found = False
-            if "FAMS" in objParent:
-                for famId in objParent["FAMS"]:
-                    ret, fam2Obj = self.getFamily(famId)
+            if "FAMS" in parentObj:
+                for famID in parentObj["FAMS"]:
+                    ret, famObj = self.getFamily(famID)
                     if ret:
-                        if fam2Obj.get(partnerWho,"") == "":
-                            self._assignParent(obj, objParent, fam2Obj, who)
+                        partnerWho = "HUSB" if who == "WIFE" else "WIFE"
+                        if famObj.get(partnerWho,"") == "":
                             found = True
                             break
-            
             if not found:
                 # Add new family #
-                famId = self.getNextFamId()
-                self.addFamily(famId)
-                ret, fam2Obj = self.getFamily(famId)
-                if ret:
-                    self._assignParent(obj, objParent, fam2Obj, who)
-    def _assignParent(self, childObj, parentObj, famObj, who):
-        # FAMS >> HUSB / WIFE #
-        famObj[who] = parentObj["id"]
-        self._addToFamLog(famObj["id"], who, parentObj["id"], "+")
+                famID = self._addFamily()
+
+        # Finally, write entries! #
+        if who == "HUSB": 
+            self.setFamilyHusband(famID, parentID)
+        else:             
+            self.setFamilyWife(famID, parentID)       
+        self.setFamilyChild(famID, childID)
+    def assignParents(self, childID, motherID, fatherID):
+        # CHECKS: Do all person objects exist? #
+        ret = self.getPerson(childID)
+        if not ret: 
+            print("Kind " + str(childID) + " existiert nicht")
+            return False
+        ret = self.getPerson(motherID)
+        if not ret: 
+            print("Mutter " + str(motherID) + " existiert nicht")
+            return False
+        ret = self.getPerson(fatherID)
+        if not ret: 
+            print("Vater " + str(fatherID) + " existiert nicht")
+            return False
         
-        # FANS >> CHIL #
-        if "CHIL" in famObj:
-            if childObj["id"] not in famObj["CHIL"]:
-                famObj["CHIL"].append(childObj["id"])
-                self._addToFamLog(famObj["id"], "CHIL", childObj["id"], "+")
-        else:
-            famObj["CHIL"] = [childObj["id"]]
-            self._addToFamLog(famObj["id"], "CHIL", childObj["id"], "+")
+        # Need to unassign the child from another family? #
+        self.removeChildFromFamily(childID)
         
-        # INDI (child) >> FAMC #
-        childObj["FAMC"] = famObj["id"]
-        self._addToLog(childObj["id"], "FAMC", famObj["id"], "+")
+        # is there a family with father and mother already? #
+        famID = self.getFamilyForPair(motherID, fatherID)
         
-        # INDI (parent) >> FAMS #
-        if "FAMS" in parentObj:
-            if famObj["id"] not in parentObj["FAMS"]:
-                parentObj["FAMS"].append(famObj["id"])
-                self._addToLog(parentObj["id"], "FAMS", famObj["id"], "+")
-        else:
-            parentObj["FAMS"] = [famObj["id"]]
-            self._addToLog(parentObj["id"], "FAMS", famObj["id"], "+")
+        # Create a new family if necessary #
+        if famID == "":
+            famID = self._addFamily()
+            
+        # TODO: wenn Mutter und Vater vertauscht sind, soll das ok sein, selbst nach Geschlecht schauen!
+        # Add mother (WIFE), father (HUSB), child (CHIL) to family #
+        # Add family to mother, father (INDI > FAMS) and child (INDI > FAMC) #
+        self.setFamilyHusband(famID, fatherID)
+        self.setFamilyWife(famID, motherID)
+        self.setFamilyChild(famID, childID)
+        
+        return True
+    def _deleteFamilyIfPossible(self, famID):                                         
+        ret, famObj = self.getFamily(famID)
+        if not ret: return
+        
+        # Delete whole family, if only WIFE and/or HUSB entries
+        pCnt = 0
+        # Do mother and father exist? #
+        fatherID = famObj.get("HUSB","")
+        if fatherID != "":
+            pCnt = pCnt + 1
+        motherID = famObj.get("WIFE","")
+        if motherID != "":
+            pCnt = pCnt + 1
+        pCnt = pCnt + 1 # for "id" of familiy
+        
+        if len(famObj) == pCnt:
+            self._removeFamily(famID)
     def _fillHelperLists(self):
         self.helperPersList = {}
         self.helperNoteList = {}
@@ -2112,6 +2118,27 @@ class Data():
     def onExit(self):
         # Called from main.py #
         return self._updateFromLog(1)
+    def removeChildFromFamily(self, childID):
+        ret, childObj = self.getPerson(childID)
+        if not ret: return
+        
+        famID = childObj.get("FAMC")
+        if famID == None: return
+        
+        ret, famObj = self.getFamily(famID)
+        if not ret: return
+        
+        children = famObj.get("CHIL")
+        if children != None:
+            if childID in children:
+                children.remove(childID)
+                self._addToFamLog(famID, "CHIL", childID, "-")
+                
+            if len(children) == 0:
+                famObj.pop("CHIL","")
+                self._addToFamLog(famID, "CHIL", "", "-")
+                
+        self._deleteFamilyIfPossible(famID)
     def _removeFamily(self, fam):
         idx = self.helperFamList.get(fam,-1)
         if idx < 0: return
@@ -2129,21 +2156,21 @@ class Data():
         # remove "FAMS" from jDATA["INDI"] for both parents
         ret, pers = self.getPerson(idMother)
         if ret:
-            famObjs = pers.get("FAMS")
-            if famObjs != None:
-                for obj in famObjs:
-                    if fam in famObjs:
-                        famObjs.remove(fam)
-                        self._addToLog(idMother, "FAMS", "", "-")
+            famIDs = pers.get("FAMS")
+            if famIDs != None:
+                for obj in famIDs:
+                    if fam in famIDs:
+                        famIDs.remove(fam)
+                        self._addToLog(idMother, "FAMS", fam, "-")
                         
         ret, pers = self.getPerson(idFather)
         if ret:
-            famObjs = pers.get("FAMS")
-            if famObjs != None:
-                for obj in famObjs:
-                    if fam in famObjs:
-                        famObjs.remove(fam)
-                        self._addToLog(idFather, "FAMS", "", "-")
+            famIDs = pers.get("FAMS")
+            if famIDs != None:
+                for obj in famIDs:
+                    if fam in famIDs:
+                        famIDs.remove(fam)
+                        self._addToLog(idFather, "FAMS", fam, "-")
         
         # remove "FAMC" from jDATA["INDI"] 
         for idChild in children:
@@ -2191,48 +2218,17 @@ class Data():
             
         return tabData
     def unassignParent(self, childID, who):
-        childObj = self.getPerson()
-        
-        # Remove FAMC from child
-        fam = childObj.pop("FAMC","") # remove key if exists
-        self._addToLog(childID, "FAMC", "", "-")
-        
-        if fam != "":
-            ret, famObj = self.getFamily(fam)
-            if ret:
-                pCnt = 0
+        fatherID, motherID = self.getParentsIDs(childID)
+        self.removeChildFromFamily(childID)
                 
-                # Do mother and father exist? #
-                fatherId = famObj.get("HUSB","")
-                if fatherId != "":
-                    pCnt = pCnt + 1
-                motherId = famObj.get("WIFE","")
-                if motherId != "":
-                    pCnt = pCnt + 1
+        # Assign person to the other part of parents
+        if fatherID != "" and motherID != "":
+            if who == "HUSB":
+                self.assignParent(childID, motherID, "WIFE")
+            elif who == "WIFE":
+                self.assignParent(childID, fatherID, "HUSB")
                 
-                # remove child from family #
-                children = famObj.get("CHIL")
-                if children != None:
-                    children.remove(id)
-                    self._addToFamLog(fam, "CHIL", id, "-")
-                    if len(children) == 0:
-                        famObj.pop("CHIL","")
-                        self._addToFamLog(fam, "CHIL", "", "-")
-                
-                # if family consists of HUSB and/or WIFE only, then remove Family #
-                pCnt = pCnt + 1 # for "id" of familiy
-                if len(famObj) == pCnt:
-                    self._removeFamily(fam)
-                
-                # Assign person to the other part of parents
-                if fatherId != "" and motherId != "":
-                    if who == "HUSB":
-                        self.assignParent(id, motherId, "WIFE")
-                    elif who == "WIFE":
-                        self.assignParent(id, fatherId, "HUSB")
-                
-                return True
-        return False                
+        return True
     def updatePersValue(self,objectType,id,field,value):
         # Called from PersonListWidget.py #
         

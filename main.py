@@ -2,7 +2,7 @@
 import sys
 
 from PyQt5 import QtGui
-from PyQt5.QtWidgets import QApplication, QAction, QMainWindow
+from PyQt5.QtWidgets import QApplication, QMainWindow, QStyleFactory
 from PyQt5.QtCore import Qt
 from classes.GraphList import GraphList
 from classes.MainWidget import MainWidget
@@ -98,6 +98,11 @@ class Main(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    
+    # This is because of coloring header line of table in PersonListWidget #
+    # https://stackoverflow.com/questions/36196988/color-individual-horizontal-headers-of-qtablewidget-in-pyqt
+    app.setStyle(QStyleFactory.create('Fusion'))
+    
     ex = Main()
     ex.show()
     # ex.graphList.addGraph("") # Parameter in Brackets: id of central person; here: no person

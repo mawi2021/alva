@@ -254,7 +254,7 @@ class Graph(QMainWindow):
                 painter.setPen(self.partnerFontColor)
 
                 # Marriage
-                ret, fam = self.data.getFamilyForPair(pid,partnerPid)
+                fam = self.data.getFamilyForPair(pid,partnerPid)
                 ret, marrStruc = self.data.getMarriageForFam(fam)
                 if ret:
                     text = "oo " + marrStruc["date"] + " " + marrStruc["place"]

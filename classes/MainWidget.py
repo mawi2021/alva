@@ -21,7 +21,7 @@ class MainWidget(QWidget):
         # TODO: read values from config file
         self.top = 0
         self.left = 0
-        self.width = 1400
+        self.width = 2000
         self.height = 1000
 
         statusBgColorStr = 'background-color:white'
@@ -41,7 +41,7 @@ class MainWidget(QWidget):
         mainSplitter = QSplitter(Qt.Horizontal)
         mainSplitter.addWidget(self.listFrame)
         mainSplitter.addWidget(self.persFrame)
-        mainSplitter.setSizes([600,300])
+        mainSplitter.setSizes([1000,1000])
 
         statusSplitter = QSplitter(Qt.Vertical)
         statusSplitter.addWidget(mainSplitter)

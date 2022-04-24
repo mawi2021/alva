@@ -21,6 +21,7 @@ class PersonWidget(QWidget):
         
         self.navigationListBack = []
         self.ID                 = ""
+        self.persLbl            = QLabel("")
         self.clickTxt           = "<klick hier>"
         self.childWidgetPos     = -1
 
@@ -30,30 +31,37 @@ class PersonWidget(QWidget):
                 
     # ----- UI RELATED -------------------------------------------------------------------------- #
     def initUI(self):
-        self.qTabWidget = QTabWidget()
+        layout = QVBoxLayout()
 
         # Initialize tab screen
+        qTabWidget = QTabWidget()
+
         self.tabGeneral = QWidget()
         self.eSexGroup = QButtonGroup(objectName="general>sexGroup") # must be globally, otherwise no signal received
-        self.qTabWidget.addTab(self.tabGeneral, "Allgemein")
+        qTabWidget.addTab(self.tabGeneral, "Allgemein")
         self._addGeneralFields()
         
         self.tabParents = QWidget()
-        self.qTabWidget.addTab(self.tabParents, "Eltern")
+        qTabWidget.addTab(self.tabParents, "Eltern")
         self._addParentsFields()
         
         self.tabFamily  = QWidget()
         self.formFamilyLayout = QFormLayout()
-        self.qTabWidget.addTab(self.tabFamily, "Partner und Kinder")
+        qTabWidget.addTab(self.tabFamily, "Partner und Kinder")
         self.famWidgetList = [] # <============
         self._addFamilyFields()
         
         self.tabRaw     = QWidget()
-        self.qTabWidget.addTab(self.tabRaw, "Raw")
+        qTabWidget.addTab(self.tabRaw, "Raw")
         self._addRawFields()
+
+        # Central Person #        
+        layout.addWidget(self.persLbl)
+        self.persLbl.setStyleSheet("background-color:rgb(128,255,255);padding:10px;font-weight:bold;font-size:12px;border:1px solid gray;")
 
         # Button Line above Tab Widget
         hboxB = QHBoxLayout()
+        layout.addLayout(hboxB)
 
         self.backButton = QPushButton("🡸", self)
         self.backButton.clicked.connect(self._navigateBack)
@@ -68,10 +76,8 @@ class PersonWidget(QWidget):
         hboxB.addWidget(self.addButton)
 
         # Add box layout, add table to box layout and add box layout to widget
-        self.layout = QVBoxLayout()
-        self.layout.addLayout(hboxB)
-        self.layout.addWidget(self.qTabWidget) 
-        self.setLayout(self.layout) 
+        layout.addWidget(qTabWidget) 
+        self.setLayout(layout) 
 
     def _addGeneralFields(self):
         
@@ -305,6 +311,7 @@ class PersonWidget(QWidget):
     def setPerson(self,id):
         # Called from MainWidget.py #
         self.ID = id
+        self.persLbl.setText(self.data.getPersStr(id))
         
         # ----- Details of the Person ----- #
         self._setPersonDetails()
@@ -443,11 +450,19 @@ class PersonWidget(QWidget):
                 text = "@" + text[:pos+1]
                 orig = self.data.getPersStr(text)
                 
-                self.data.assignParent(text, self.ID, who)
+                # get Partner #
+                partnerID = self.famWidgetList[0]["partnerNavButton"].text()
+                ret, sex = self.data.getSex(self.ID)
+                if sex == "m":
+                    self.data.assignParents(text, partnerID, self.ID)
+                else:
+                    self.data.assignParents(text, self.ID, partnerID)
                 widBtn.setText(text)
                 wid.setText(orig.replace(text + " ", ""))        
-    def _onDeleteChildRow(self, xbool, id):
-        self._deleteChildRow(0, id)
+    def _onDeleteChildRow(self, xbool, childID):
+        # Unassign child from family and delete widgets #
+        self.data.removeChildFromFamily(childID)        
+        self._deleteChildRow(0, childID)
     def _onEditingFirstnameFinished(self):
         ret, name = self.data.getName(self.ID)
         if not ret: 
