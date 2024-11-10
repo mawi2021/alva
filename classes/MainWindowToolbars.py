@@ -5,6 +5,8 @@
 from PyQt5.QtWidgets import QToolBar, QAction
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QSize
+from os import listdir
+from os.path import isfile, join
 
 class MainWindowToolbars():
 
@@ -68,6 +70,7 @@ class MainWindowToolbars():
             self.detailToolBar.addAction(self.parent.menu.importAction)
             self.detailToolBar.addAction(self.parent.menu.exportAction)
             self.detailToolBar.addAction(self.parent.menu.exitAction)
+
         #elif name == "Process":
         #elif name == "View":
         elif name == "Out":

@@ -1,6 +1,4 @@
 {
-    "currProject": "Edison",
-    "currProjectFile": "data/Edison.json",
     "encoding": "utf-8",
     "personListFields": {
         "id": "ID",
@@ -12,5 +10,7 @@
         "DEAT>PLAC": "Tod Ort"
     },
     "projectDir": "data",
-    "persLog": "logs/pers.log"
+    "persLog": "logs/pers.log",
+    "currProject": "Wettiner",
+    "currProjectFile": "data/Wettiner.json"
 }

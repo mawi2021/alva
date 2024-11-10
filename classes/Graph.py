@@ -1,45 +1,23 @@
-from PyQt5 import uic
 from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea
 from PyQt5.QtGui import QPainter, QBrush, QColor, QFont, QPixmap, QPalette
 from PyQt5.QtCore import Qt
-import sys
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
-import math
-
-# TODO:
-# - Eltern-Kind-Strich von Kind zu Partner und nicht zu ohnehin feststehendem Elternteil
-# - vielleicht bekommt man die Auswichtung etwas besser hin?
-# - Icon zum Neuanlegen einer Person
-# - Partner haben keine Bezeichnung ihrer Beziehung zur zentralen Person
-# - Großeletern doppelt wegen Partnern
-# - hover mit mehr Details?
-# - Person- und Partnerdetails aus der Datenbank bereits beim setPerson()
-# - Buttons für "Abdocken", "Andocken", "Refresh"(?), Drucken
-# - Großeletern-Strich in die Mitte
-# - Eltern-Strich in die Mitte (betrifft nicht Onkel und Tanten!)
-# - Eltern als ein Elternteil plus Partner ist nicht so doll
-# - Beschriftung Verwandtschaftsname nicht fett
-# - Vater als letztes und Mutter als erstes Geschwisterkind sortieren, dann beide ohne Lücke 
-#   zusammenfügen (was passiert mit anderen Partnern?)
-# - Großelternpaare lückenlos zusammenfügen (was passiert mit anderen Partnern?)
-# - Stief- und Halbgeschwister?
 
 class Graph(QMainWindow):
 
-
     # ----- Read GUI Content from UI File ---------------------------- *
-    def __init__(self, main, data):
+    def __init__(self, main, data, id):
         super().__init__()
-        self.main = main
-        self.data = data
+        self.main       = main
+        self.data       = data
 
-        self.gedWindow = QMainWindow()
-        self.rootPid   = ""
-        self.boxNumMax = 0
-        self.xMitte    = 0
-        self.yMitte    = 0
+        self.gedWindow  = QMainWindow()
+        self.rootPid    = ""
+        self.boxNumMax  = 0
+        self.xMitte     = 0
+        self.yMitte     = 0
         self.yRootMitte = 0
         self.xRootMitte = 0
         
@@ -47,6 +25,7 @@ class Graph(QMainWindow):
         # each record includes: x, y, sex, relation, mother (id), father (id), partners (list)
         # each partner record includes: fam_id, id, sex
         self.boxList = {}
+        self.lineList = []
         
         self.lineHeight = 14
         self.margin = 10
@@ -56,8 +35,8 @@ class Graph(QMainWindow):
         self.boxWidth = 180
         self.boxOffset = 50
         self.windowOffset = 10
-        self.shortBoxHeight = 4 * self.lineHeight + 0.5 * self.margin
-        self.boxHeight      = 9 * self.lineHeight + 0.5 * self.margin
+        self.shortBoxHeight = int(4 * self.lineHeight + 0.5 * self.margin)
+        self.boxHeight      = int(9 * self.lineHeight + 0.5 * self.margin)
         self.doNotRepaint = False
 
         self.colorMan = QColor(205, 164, 118, 255)
@@ -67,9 +46,11 @@ class Graph(QMainWindow):
         self.frameColorBloodline = Qt.red
         self.backgroundColor = QColor(220,220,220)
         self.fontColor = Qt.black
-        self.partnerFontColor = Qt.gray
+        self.partnerFontColor = QColor(100,100,100)
         self.shadowColor = QColor(220,220,220,255)
         self.centralColor = QColor("purple")
+
+        self.setPerson(id)
 
         self.yMax = 900
         self.xMax = 1150
@@ -91,7 +72,6 @@ class Graph(QMainWindow):
         
         # self.setCentralWidget(self.label)
         self.label.mousePressEvent = self.onMouseClick
-
     def onMouseClick(self, event):
         x = event.pos().x()
         y = event.pos().y()
@@ -112,61 +92,43 @@ class Graph(QMainWindow):
                         cnt = cnt + 1
                         yPartner = box["y"] + cnt * self.shortBoxHeight
                         if y >= yPartner and y <= yPartner + self.shortBoxHeight:
-                            self.main.widget.setPerson(partner["id"])
+                            self.main.widget.setPerson(partner)
                             self.doNotRepaint = False
                             return
-
     def paintEvent(self, event):
-
-        # self.coordList = []
-        if self.doNotRepaint == True:
-            self.doNotRepaint = False
-            return
-
         pixi = QPixmap(self.xMax, self.yMax)
         self.label.setPixmap(pixi)
         painter = QPainter(self.label.pixmap())
+
+        # painter.begin(self) # new
 
         brush = QBrush()
         brush.setColor(self.backgroundColor)
         brush.setStyle(Qt.SolidPattern)
         painter.setBrush(brush)
-
-        painter.drawRect(0, 0, self.xMax - 1, self.yMax - 1)
         painter.setPen(self.fontColor)
+
+        painter.drawRect(0, 0, int(self.xMax - 1), int(self.yMax - 1))
         
         if self.vertical:
             self.paintVertical(event, painter)
         else:
             self.paintHorizontal(event, painter)
 
-    def paintHorizontal(self, event, painter): # Old version
+        painter.end()   # new
+    def paintHorizontal(self, event, painter): 
         for pid in self.boxList:
-            box = self.boxList[pid]
             self.paintBox(painter, pid)
-            if box["x"] > self.windowOffset:
-                newYF = 0
-                newYM = 0
-                father = self.data.getFatherId(pid)
-                mother = self.data.getMotherId(pid)
-                
-                if father in self.boxList:
-                    newYF = self.boxList[father]["y"]
-                if mother in self.boxList:
-                    newYM = self.boxList[mother]["y"]
-                        
-                if newYF > 0 and newYM > 0 and self.boxList[mother]["relation"] == "Oma":
-                    painter.drawLine(box["x"], box["y"] + self.shortBoxHeight / 2, 
-                                        box["x"] - self.boxOffset, newYF + self.shortBoxHeight)
-                elif newYF > 0:
-                    painter.drawLine(box["x"], box["y"] + self.shortBoxHeight / 2, 
-                                        box["x"] - self.boxOffset, newYF + self.shortBoxHeight / 2)
-                elif newYM > 0:
-                    painter.drawLine(box["x"], box["y"] + self.shortBoxHeight / 2, 
-                                        box["x"] - self.boxOffset, newYM + self.shortBoxHeight / 2)
+            print(pid)
 
-        painter.end()
-
+        for line in self.lineList:
+            # print("boxL: " + line["boxLeft"])
+            boxL = self.boxList[line["boxLeft"]]
+            boxR = self.boxList[line["boxRight"]]
+            painter.drawLine(boxL["x"] + self.boxWidth, boxL["y"] + int(self.shortBoxHeight / 2),
+                             boxR["x"],                 boxR["y"] + int(self.shortBoxHeight / 2))
+    def paintVertical(self, event, painter):
+        pass
     def paintBox(self, painter, pid):
 
         box = self.boxList[pid]
@@ -208,6 +170,9 @@ class Graph(QMainWindow):
             painter.drawText(
                 x + self.margin, y + line * self.lineHeight, nameArr["surname"]
             )  # Nachname
+
+        # ID 
+        painter.drawText(x - self.margin, y + int((line - 2.3) * self.lineHeight), pid[2:-1])
 
         # Birth
         line = line + 1
@@ -303,10 +268,8 @@ class Graph(QMainWindow):
                 painter.drawRect(x - i, y - i, self.boxWidth + 2, self.shortBoxHeight + 2)
 
         return
-
     def setVertical(self, value): # True / False
         self.vertical = value
-
     def setPerson(self, pid):
         if self.rootPid == pid:
             return
@@ -314,7 +277,6 @@ class Graph(QMainWindow):
         self.rootPid = pid
 
         parentList        = []  # List of pids
-
         grandparentList   = {}
         parentsiblingList = {}  # Uncles and Aunts
         cousinList        = {}  # List of pids
@@ -322,19 +284,20 @@ class Graph(QMainWindow):
         grandchildList    = {}
 
         # Parents
-        ret, parentList = self.data.getParentsList(self.rootPid)
+        fatherID, motherID = self.data.getParentsIDs(self.rootPid)
+        if fatherID != "":
+            parentList.append(fatherID)
+        if motherID != "":
+            parentList.append(motherID)
         
         # Grandparents
-        x =  self.windowOffset
+        x = self.windowOffset
         for pid in parentList:
-            ret, list = self.data.getParentsList(pid)
-            for elem in list:
-                if elem not in grandparentList:
-                    ret, sex = self.data.getSex(elem)
-                    if sex == "m":
-                        grandparentList[elem] = {"x": x, "y": 0, "sex": sex, "relation": "Opa"}
-                    else:
-                        grandparentList[elem] = {"x": x, "y": 0, "sex": sex, "relation": "Oma"}
+            fatherID, motherID = self.data.getParentsIDs(pid)
+            if fatherID != "":
+                grandparentList[fatherID] = {"x": x, "y": 0, "sex": "m", "relation": "Opa"}
+            if motherID != "":
+                grandparentList[motherID] = {"x": x, "y": 0, "sex": "w", "relation": "Oma"}
             
         # Parents, Uncles and Aunts
         x = x + self.boxWidth + self.boxOffset
@@ -343,6 +306,7 @@ class Graph(QMainWindow):
             ret, list = self.data.getChildren(key)
             for elem in list:
                 if elem not in parentsiblingList:
+                    self.lineList.append({"boxLeft":key, "boxRight": elem})
                     ret, sex = self.data.getSex(elem)
                     if elem in parentList:
                         if sex == "m":
@@ -358,7 +322,7 @@ class Graph(QMainWindow):
                     parentsiblingList[elem]["father"] = key
                 else:
                     parentsiblingList[elem]["mother"] = key
-        # If no grandparents, then no parents found - do it manually
+        # If no grandparents, then no grandparents found - add parent boxes manually
         if len(grandparentList) == 0:
             for elem in parentList:
                 if elem not in parentsiblingList:
@@ -375,6 +339,7 @@ class Graph(QMainWindow):
             ret, list = self.data.getChildren(key)
             for elem in list:
                 if elem not in cousinList:
+                    self.lineList.append({"boxLeft":key, "boxRight": elem})
                     ret, sex = self.data.getSex(elem)
                     if elem == self.rootPid:
                         cousinList[elem] = {"x": x, "y": 0, "sex": sex, "relation": ""}
@@ -404,6 +369,7 @@ class Graph(QMainWindow):
             ret, list = self.data.getChildren(key)
             for elem in list:
                 if elem not in childList:
+                    self.lineList.append({"boxLeft":key, "boxRight": elem})
                     ret, sex = self.data.getSex(elem)
                     if key == self.rootPid:
                         if sex == "m":
@@ -435,6 +401,7 @@ class Graph(QMainWindow):
             ret, list = self.data.getChildren(key)
             for elem in list:
                 if elem not in grandchildList:
+                    self.lineList.append({"boxLeft":key, "boxRight": elem})
                     ret, sex = self.data.getSex(elem)
                     if person["relation"] == "Sohn" or person["relation"] == "Tochter":
                         if sex == "m":
@@ -456,21 +423,11 @@ class Graph(QMainWindow):
                 else:
                     grandchildList[elem]["mother"] = key
 
-    # Fill Boxes, Add Partners, Calculate yMax
+        # Fill Boxes, Add Partners, Calculate yMax
         y = self.windowOffset
         for key in grandparentList: # Partners of Grandparents are ignored
             grandparentList[key]["y"] = y
             grandparentList[key]["partners"] = []
-            # ret, grandparentList[key]["partners"] = self.data.getPartners(key)
-            # if ret:
-            #     for gp in grandparentList[key]["partners"]:
-            #         if gp in grandparentList:
-            #             # remove this partner in partner list
-            #             grandparentList[key]["partners"].remove(gp)
-            # # Are there still Partners?
-            # if grandparentList[key]["partners"]:
-            #     y = y + self.boxOffset + (len(grandparentList[key]["partners"]) + 1) * self.shortBoxHeight          
-            # else: 
             y = y + self.shortBoxHeight # + self.boxOffset   
         yMax = y
         y1 = y
@@ -521,7 +478,7 @@ class Graph(QMainWindow):
         yMax = max(y, yMax)
         y5 = y
 
-        self.yMax = yMax + self.windowOffset
+        self.yMax = int(yMax + self.windowOffset)
         
         # Norm y-Values in the centre of verticale axis
         self.boxList = {}
@@ -539,8 +496,7 @@ class Graph(QMainWindow):
             self.boxList[key] = childList[key]                    
         for key in grandchildList:
             grandchildList[key]["y"] = grandchildList[key]["y"] + int((self.yMax - y5) / 2)
-            self.boxList[key] = grandchildList[key]
-            
+            self.boxList[key] = grandchildList[key]     
     def clearGraph(self):
         # self.person["Grandparents"]   = []
         # self.person["Parents"]        = []  # List of pids
@@ -553,3 +509,4 @@ class Graph(QMainWindow):
         # self.label.pixmap().fill(self.backgroundColor)
         # self.update();
         self.main.graphList.update()
+

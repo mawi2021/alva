@@ -1,4 +1,4 @@
-# Run: C:\Users\D026557\AppData\Local\Programs\Python\Python39\python.exe main.py
+# Doku: https://alva.ur-ahn.de/
 import sys
 
 from PyQt5 import QtGui
@@ -10,6 +10,37 @@ from classes.MainWindowMenu import MainWindowMenu
 from classes.MainWindowToolbars import MainWindowToolbars
 from classes.Data import Data
 from classes.Config import Config
+
+# WEITER MIT PersonWidget >> _onPartnerClick()
+# TODO (Graph.py):
+# - Eltern-Kind-Strich von Kind zu Partner und nicht zu ohnehin feststehendem Elternteil
+# - vielleicht bekommt man die Auswichtung etwas besser hin?
+# - Icon zum Neuanlegen einer Person
+# - Partner haben keine Bezeichnung ihrer Beziehung zur zentralen Person
+# - Großeletern doppelt wegen Partnern
+# - hover mit mehr Details?
+# - Person- und Partnerdetails aus der Datenbank bereits beim setPerson()
+# - Buttons für "Abdocken", "Andocken", "Refresh"(?), Drucken
+# - Großeletern-Strich in die Mitte
+# - Eltern-Strich in die Mitte (betrifft nicht Onkel und Tanten!)
+# - Eltern als ein Elternteil plus Partner ist nicht so doll
+# - Beschriftung Verwandtschaftsname nicht fett
+# - Vater als letztes und Mutter als erstes Geschwisterkind sortieren, dann beide ohne Lücke 
+#   zusammenfügen (was passiert mit anderen Partnern?)
+# - Großelternpaare lückenlos zusammenfügen (was passiert mit anderen Partnern?)
+# - Stief- und Halbgeschwister?
+# - Update-Button
+# TODO (Personenliste)
+# - Copy&Paste in Personentabelle nicht möglich
+# TODO (PersonWidget)
+# - Neuer Ehepartner => es ist derzeit nicht klar, zu welcher Familie er gehört (_onPartnerClick)
+# - Block für weitere Familie erstellen - nötig(?)
+# - Kommentar zur Person: wenn man schreibt, sind Schrift, Schriftart, Größe und Hintergrund nicht 
+#   einheitlich mit dem Rest
+# - Löschen einer Ehe (fehlt)
+# TODO (allgemein)
+# - Ctrl + S >> Speichern
+# - Neues Flag, dass zu der Person noch nicht alle INfos erfasst sind (Eltern <=> Ehen <=> Kinder)
 
 class Main(QMainWindow):
 

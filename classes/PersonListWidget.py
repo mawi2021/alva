@@ -30,7 +30,6 @@ class PersonListWidget(QWidget):
         cnt = 0
         for obj in fields:
             headerItem = QTableWidgetItem(fields[obj])
-            #headerItem.setBackground(self.bgColorTableHead)
             self.tableWidget.setHorizontalHeaderItem(cnt,headerItem)
             cnt += 1
             
@@ -58,8 +57,10 @@ class PersonListWidget(QWidget):
         cnt = self.tableWidget.rowCount()
         self.tableWidget.insertRow(cnt)
 
-        for i in range(len(data)):
-            self.tableWidget.setItem(cnt, i, QTableWidgetItem(data[i]))
+        if data:
+            if len(data) > 0:
+                for i in range(len(data)):
+                    self.tableWidget.setItem(cnt, i, QTableWidgetItem(data[i]))
     def clearTable(self):
         self.tableWidget.clearContents()
         self.tableWidget.setRowCount(0)
@@ -89,19 +90,26 @@ class PersonListWidget(QWidget):
         # Un-Highlight formerly highlighted Rows #
         for row in self.highlightedRows:
             for col in range(self.tableWidget.columnCount()):
-                self.tableWidget.item(row,col).setBackground(self.bgColorNormal)
+                item = self.tableWidget.item(row,col)
+                if item:
+                    item.setBackground(self.bgColorNormal)
         self.highlightedRows = []
 
         # Highlight selected Row #
         for col in range(self.tableWidget.columnCount()):
-            self.tableWidget.item(newRow,col).setBackground(self.bgColorHighlight)
+            item = self.tableWidget.item(newRow,col)
+            if item:
+                item.setBackground(self.bgColorHighlight)
         self.highlightedRows.append(newRow)
     def updateTableHighlightedRow(self,data):
         # Called from PersonWidget.py #
         for row in self.highlightedRows:
             for i in range(len(data)):
-                # Update each column content #
-                self.tableWidget.setItem(row, i, QTableWidgetItem(data[i]))   
+                # Update each cell content #
+                item = self.tableWidget.item(row,i)
+                if item:
+                    item.setText(data[i])
+                    item.setBackground(self.bgColorHighlight)
     def _onCellClicked(self, row, col):
         for selItem in self.tableWidget.selectedItems():
             id = self.tableWidget.item(selItem.row(),0).text()
@@ -114,9 +122,11 @@ class PersonListWidget(QWidget):
             self.main.widget.setPerson(id)
             return # take one row only into cosideration for each double-click event #
     def _onChange(self):
-        # is called when ending editing of a call by enter or tab (= leaving a changed cell) #
-        # When changing the color of a cell, this routine is called, too - be aware of possible
-        # endless loops!
+        # is called 
+        # - when ending editing of a call by enter or tab (= leaving a changed cell)
+        # - when changing the color of a cell
+        # - When adding new table lines
+        # be aware of possible endless loops!
         for selItem in self.tableWidget.selectedItems():
             id = self.tableWidget.item(selItem.row(),0).text()
             col = selItem.column()
