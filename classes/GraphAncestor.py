@@ -29,18 +29,18 @@ class GraphAncestor(QMainWindow):
         self.maxYear  = maxYear
         
         self.lineHeight = 14
-        self.margin = 10
-        self.fontSize = 8
-        self.fontFace = "Tahoma"
+        self.margin     = 10
+        self.fontSize   = 8
+        self.fontFace   = "Tahoma"
 
-        self.boxWidth = 180
-        self.boxOffset = 50
-        self.windowOffset = 10
+        self.boxWidth       = 180
+        self.boxOffset      = 50
+        self.windowOffset   = 10
         self.shortBoxHeight = int(4 * self.lineHeight + 0.5 * self.margin)
         self.boxHeight      = int(9 * self.lineHeight + 0.5 * self.margin)
-        self.doNotRepaint = False
-        self.yMax = 900
-        self.xMax = 1150
+        self.doNotRepaint   = False
+        self.yMax           = 900
+        self.xMax           = 1150
 
         self.colorMan = QColor(205, 164, 118, 255)
         self.frameColorMan = QColor("black")
@@ -237,21 +237,50 @@ class GraphAncestor(QMainWindow):
 
         return
     def calcCoords(self):
+        # Simple approach; optimization is a later step #
+        xMax = self.windowOffset
+        for box in self.boxList:
+            # upper left corner
+            if box["idFather"] == 0 and box["idMother"] == 0:
+                box["x"] = xMax
+                xMax = xMax + self.boxWidth + self.boxOffset
+        
+        # adjust child in the middle below parents
+        for pid in self.boxList:
+            box = self.boxList[pid]
+            if box["x"] > 0:
+                continue
+
+            idFather = box["idFather"]
+            if idFather != "":
+                if self.boxList[idFather]["x"] == 0:
+                    continue
+
+            idMother = box["idMother"]
+            if idMother != "":
+                if self.boxList[idMother]["x"] == 0:
+                    continue            
+
+            # adjust
+            if   idFather == "": box["x"] = self.boxList[idMother]["x"]
+            elif idMother == "": box["x"] = self.boxList[idFather]["x"]
+            else: box["x"] = ( self.boxList[idFather]["x"] + self.boxList[idMother]["x"] ) / 2
+
         years = []
         coveredYears = 6
 
-        for box in self.boxList:
-            # How many Boxes side by side?
-            for i in range [0:coveredYears]:
-                years[box["year"] + i] += 1
+        # for box in self.boxList:
+        #     # How many Boxes side by side?
+        #     for i in range [0:coveredYears]:
+        #         years[box["year"] + i] += 1
             
-            if box["x"] == "":
-                box["x"] = 0
+        #     if box["x"] == "":
+        #         box["x"] = 0
 
-            # Father
-            if box.get("idFather","") == "":
+        #     # Father
+        #     if box.get("idFather","") == "":
                 
-            # Mother
+        #     # Mother
 
         
     def clearGraph(self):

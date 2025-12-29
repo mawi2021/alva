@@ -2316,7 +2316,7 @@ class Data():
         
         self._deleteFamilyIfPossible(fid)
     def createTreeAncestors(self, id): # Vorfahren
-        idList = [{"id": id}]
+        idList = {id: {"idFather": 0, "idMother": 0, "x": 0, "y": 0}}
         lineList = []
         cnt = 0
         minYear = 9999
@@ -2329,11 +2329,11 @@ class Data():
             idFather, idMother = self.getParentsIDs(pid)
             if idFather != "":
                 obj["idFather"] = idFather
-                idList.append({"id": idFather, "idChild": pid})
+                idList[idFather] = {"idFather": 0, "idMother": 0, "idChild": pid, "x": 0, "y": 0}
                 lineList.append([pid,idFather])
             if idMother != "":
                 obj["idMother"] = idMother
-                idList.append({"id": idMother, "idChild": pid})
+                idList[idMother] = {"idFather": 0, "idMother": 0, "idChild": pid, "x": 0, "y": 0}
                 lineList.append([pid,idMother])
 
             cnt = cnt + 1
@@ -2341,8 +2341,7 @@ class Data():
                 break
 
         # Add birth year
-        for obj in idList:
-            pid = obj["id"]
+        for pid in idList:
             year = ""
             ret, birth = self.getBirthData(pid)
             if ret:
