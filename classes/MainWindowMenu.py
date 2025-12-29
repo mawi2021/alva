@@ -33,6 +33,7 @@ class MainWindowMenu(QMenuBar):
         fileMenu.addSeparator()
 
         self.saveAction = QAction(QIcon("icons/disc2.png"), "Speichern", self)
+        self.saveAction.setShortcut("Ctrl+S") 
         self.saveAction.triggered.connect(parent.onSave)
         fileMenu.addAction(self.saveAction)
 
@@ -56,8 +57,23 @@ class MainWindowMenu(QMenuBar):
         self.exitAction.triggered.connect(parent.onExit)
         fileMenu.addAction(self.exitAction)
 
+        # # --------------------------------------------------------------------------------------- #
+        # processMenu = self.addMenu("Bearbeiten")
+
         # --------------------------------------------------------------------------------------- #
-        processMenu = self.addMenu("Bearbeiten")
+        personMenu = self.addMenu("Person")
+
+        self.newPersAction = QAction("Person anlegen", self)
+        self.newPersAction.triggered.connect(parent.on_new_person)
+        personMenu.addAction(self.newPersAction)
+
+        self.copyLineAction = QAction("Person kopieren", self)
+        self.copyLineAction.triggered.connect(parent.on_copy_person)
+        personMenu.addAction(self.copyLineAction)
+
+        self.deleteLineAction = QAction("Person löschen", self)
+        self.deleteLineAction.triggered.connect(parent.on_delete_person)
+        personMenu.addAction(self.deleteLineAction)
 
         # --------------------------------------------------------------------------------------- #
         viewMenu    = self.addMenu("Ansicht")

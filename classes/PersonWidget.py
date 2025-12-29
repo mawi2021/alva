@@ -5,7 +5,7 @@
 from PyQt5.QtWidgets import QTabWidget, QVBoxLayout, QWidget, QLabel, QLineEdit, QFormLayout, \
                             QHBoxLayout, QVBoxLayout, QPushButton, QTextEdit, QRadioButton, \
                             QButtonGroup, QCompleter, QInputDialog, QDialog, QSizePolicy, \
-                            QGroupBox
+                            QGroupBox, QCheckBox
 from PyQt5.QtCore import *
 from functools import partial
 from classes.GraphAncestor import GraphAncestor
@@ -14,10 +14,9 @@ import time
 
 class PersonWidget(QWidget):
 
-    def __init__(self, main, configData, data):
+    def __init__(self, main, data):
         super().__init__()
         self.main       = main
-        self.configData = configData
         self.data       = data
         
         self.navigationListBack = []
@@ -27,8 +26,7 @@ class PersonWidget(QWidget):
         self.childWidgetPos     = -1
 
         self.initUI()
-        # TODO: Auslagern in Config.py
-        self.bgColorNormal = 'background-color:rgb(255, 254, 235)'
+        self.bgColorNormal = 'background-color:rgb(252, 252, 242)'
                 
     # ----- UI RELATED -------------------------------------------------------------------------- #
     def initUI(self):
@@ -69,16 +67,20 @@ class PersonWidget(QWidget):
         hboxB.addWidget(self.backButton)
 
         self.addButton = QPushButton("Neue Person", self)
-        self.addButton.clicked.connect(self._onAddPerson)
+        self.addButton.clicked.connect(self.main.on_new_person)
         hboxB.addWidget(self.addButton)
 
-        self.addButton = QPushButton("Neue Grafik öffnen", self)
-        self.addButton.clicked.connect(self._onOpenGraph)
-        hboxB.addWidget(self.addButton)
+        self.copyButton = QPushButton("Person kopieren", self)
+        self.copyButton.clicked.connect(self.main.on_copy_person)
+        hboxB.addWidget(self.copyButton)
 
-        self.addButton = QPushButton("Vorfahren", self)
-        self.addButton.clicked.connect(self._onOpenAncestors)
-        hboxB.addWidget(self.addButton)
+        self.graphButton = QPushButton("Neue Grafik öffnen", self)
+        self.graphButton.clicked.connect(self._onOpenGraph)
+        hboxB.addWidget(self.graphButton)
+
+        self.ancButton = QPushButton("Vorfahren", self)
+        self.ancButton.clicked.connect(self._onOpenAncestors)
+        hboxB.addWidget(self.ancButton)
 
         # Add box layout, add table to box layout and add box layout to widget
         layout.addWidget(qTabWidget) 
@@ -87,6 +89,7 @@ class PersonWidget(QWidget):
     def _addGeneralFields(self):
         
         eId               = QLabel("", objectName="general>id")
+        eFinished         = QCheckBox("", objectName="general>finished")
         eFirstname        = QLineEdit("", objectName="general>firstname")
         eSurname          = QLineEdit("", objectName="general>surname")
         eSexMan           = QRadioButton("männlich", objectName="general>sexMan")
@@ -117,6 +120,10 @@ class PersonWidget(QWidget):
                 
         # ID
         formPersLayout.addRow("ID", eId)
+
+        # Finished
+        eFinished.stateChanged.connect(self._onEditingFinishedFinished)
+        formPersLayout.addRow("Fertig", eFinished)
 
         # Firstname
         eFirstname.editingFinished.connect(self._onEditingFirstnameFinished)
@@ -156,15 +163,21 @@ class PersonWidget(QWidget):
         # Comment #
         #persURLs.textChanged.connect(self._onPersURLsChanged)
         persURLs.focusOutEvent = self._onPersURLsChanged
+        # persURLs.setCursorWidth(0)
         formPersLayout.addRow("URLs", persURLs)
-        
+
+        persComment.setAcceptRichText(False)  # => Plain-Text only
+        #persComment.document().setDefaultFont(QFont("Fira Sans", 12))  # Standardfont des Dokuments
         persComment.focusOutEvent = self._onPersCommentChanged
+        # persComment.setCursorWidth(0)
         formPersLayout.addRow("Kommentar", persComment)
         
         persMedia.focusOutEvent = self._onPersMediaChanged
+        # persMedia.setCursorWidth(0)
         formPersLayout.addRow("Medien", persMedia)    
 
         persSource.focusOutEvent = self._onPersSourceChanged
+        # persSource.setCursorWidth(0)
         formPersLayout.addRow("Quellen", persSource)    
 
         # ----- PARENTS ----- #        
@@ -311,7 +324,7 @@ class PersonWidget(QWidget):
     # ----- P U B L I C ------------------------------------------------------------------------- #
     # ------------------------------------------------------------------------------------------- #
 
-    def setPerson(self,id):
+    def setPerson(self, id):
         # Called from MainWidget.py #
         self.ID = id
         self.persLbl.setText(self.data.getPersStr(id))
@@ -357,6 +370,8 @@ class PersonWidget(QWidget):
     def clearPerson(self):
         self.main.widget.setPerson("")
         self.ID = ""    
+    def get_ID(self):
+        return self.ID
     def refreshBackground(self):
         self.setStyleSheet(self.bgColorNormal)
         
@@ -422,8 +437,6 @@ class PersonWidget(QWidget):
         id = wid.text()
         self.main.widget.setPerson(id)
         self.ID = id
-    def _onAddPerson(self):
-        self.main.widget.addPerson()
     def _onChildClick(self, wid, event):
         oldText = wid.text()
         for row in self.famWidgetList[0]["childRows"]:
@@ -500,8 +513,8 @@ class PersonWidget(QWidget):
         
         if new != old:
             self.data.setFirstname(self.ID, wid.text())
-            if self.configData["personListFields"].get("NAME>GIVN","") != "":
-                self._updateListLine()
+            if self.main.is_field_in_table("NAME>GIVN"):
+                self.main.update_table_row(self.ID)
     def _onEditingSurnameFinished(self):
         ret, name = self.data.getName(self.ID)
         if not ret: 
@@ -513,9 +526,9 @@ class PersonWidget(QWidget):
         new = wid.text()
         
         if new != old:
-            self.data.setSurname(self.ID, wid.text())
-            if self.configData["personListFields"].get("NAME>SURN","") != "":
-                self._updateListLine()
+            self.data.setSurname(self.ID, new)
+            if self.main.is_field_in_table("NAME>SURN"):
+                self.main.update_table_row(self.ID)
     def _onEditingBirthDateFinished(self):
         ret, birth = self.data.getBirthData(self.ID)
         if not ret: 
@@ -528,8 +541,8 @@ class PersonWidget(QWidget):
         
         if new != old:
             self.data.setBirthDate(self.ID, wid.text())
-            if self.configData["personListFields"].get("BIRT>DATE","") != "":
-                self._updateListLine()
+            if self.main.is_field_in_table("BIRT>DATE"):
+                self.main.update_table_row(self.ID)
     def _onEditingBirthPlaceFinished(self):
         ret, birth = self.data.getBirthData(self.ID)
         if not ret: 
@@ -542,8 +555,8 @@ class PersonWidget(QWidget):
         
         if new != old:
             self.data.setBirthPlace(self.ID, wid.text())
-            if self.configData["personListFields"].get("BIRT>PLAC","") != "":
-                self._updateListLine()
+            if self.main.is_field_in_table("BIRT>PLAC"):
+                self.main.update_table_row(self.ID)
     def _onEditingDeathDateFinished(self):
         ret, death = self.data.getDeathData(self.ID)
         if not ret: 
@@ -556,8 +569,8 @@ class PersonWidget(QWidget):
         
         if new != old:
             self.data.setDeathDate(self.ID, wid.text())
-            if self.configData["personListFields"].get("DEAT>DATE","") != "":
-                self._updateListLine()
+            if self.main.is_field_in_table("DEAT>DATE"):
+                self.main.update_table_row(self.ID)
     def _onEditingDeathPlaceFinished(self):
         ret, death = self.data.getDeathData(self.ID)
         if not ret: 
@@ -570,8 +583,17 @@ class PersonWidget(QWidget):
         
         if new != old:
             self.data.setDeathPlace(self.ID, wid.text())
-            if self.configData["personListFields"].get("DEAT>PLAC","") != "":
-                self._updateListLine()
+            if self.main.is_field_in_table("DEAT>PLAC"):
+                self.main.update_table_row(self.ID)
+    def _onEditingFinishedFinished(self):
+        old = self.main.get_finished(self.ID)      
+        wid = self.tabGeneral.findChild(QCheckBox,"general>finished")
+        new = wid.isChecked()
+        
+        if new != old:
+            self.main.set_finished(self.ID, new)
+            if self.main.is_field_in_table("finished"):
+                self.main.update_table_row(self.ID)
     def _onEditingMarriageDateFinished(self, wid, idx):
         old = self.data.getMarriageDate(self.ID, idx)
         new = wid.text()
@@ -695,7 +717,7 @@ class PersonWidget(QWidget):
         wid = self.tabGeneral.findChild(QTextEdit,"general>urls")
         self.data.setUrl(self.ID, wid.toPlainText())
     def _onSexStateClicked(self):
-        ret, old = self.data.getSex(self.ID)
+        _, old = self.data.getSex(self.ID)
         
         widM = self.tabGeneral.findChild(QRadioButton,"general>sexMan")
         widW = self.tabGeneral.findChild(QRadioButton,"general>sexWoman")
@@ -705,12 +727,15 @@ class PersonWidget(QWidget):
         
         if new != old:
             self.data.setSex(self.ID, new)
-            if self.configData["personListFields"].get("SEX","") != "":
-                self._updateListLine()
+            self.main.update_table_row(self.ID) # always update due to coloring of id column
     def _setPersonDetails(self):
         wid = self.tabGeneral.findChild(QLabel,"general>id")
         wid.setText(self.ID)
         
+        finished = self.data.get_finished(self.ID)
+        widFini  = self.tabGeneral.findChild(QCheckBox,"general>finished")
+        widFini.setChecked(finished)
+
         # Name #
         ret, name = self.data.getName(self.ID)
         widF = self.tabGeneral.findChild(QLineEdit,"general>firstname")
@@ -938,9 +963,6 @@ class PersonWidget(QWidget):
             return True, text, orig.replace(text + " ", "")
         
         return False, "", "" 
-    def _updateListLine(self):
-        line = self.data.getPersonForTable(self.ID)
-        self.main.widget.listFrame.updateTableHighlightedRow(line)
     def _updateRelationBox(self):
         wid = self.tabGeneral.findChild(QTextEdit,"general>ownFamily")  #Read Only Widget
         famList = self.data.getOwnFamily(self.ID)

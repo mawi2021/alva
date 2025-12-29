@@ -5,20 +5,19 @@ from PyQt5 import QtGui
 from PyQt5.QtWidgets import QApplication, QWidget, QFrame, QLineEdit, QHBoxLayout, QSplitter, \
                             QSizePolicy, QVBoxLayout, QAction, QMainWindow
 import sys
-from PyQt5.QtCore import Qt
-from classes.PersonListWidget import PersonListWidget
+from PyQt5.QtCore         import Qt
+from classes.TableWidget  import TableWidget
 from classes.PersonWidget import PersonWidget
 
 class MainWidget(QWidget):
-    def __init__(self, main, configData, data):
+    def __init__(self, main, data):
         super().__init__()
         self.main       = main
-        self.configData = configData
         self.data       = data
         self.graphList  = ""
 
         # ----- Constants ----------------------------------------------------------------------- #
-        # TODO: read values from config file
+        # TODO: read values from conf file
         self.top = 0
         self.left = 0
         self.width = 2000
@@ -27,11 +26,10 @@ class MainWidget(QWidget):
         statusBgColorStr = 'background-color:white'
 
         # ----- Create Main Window Panels ------------------------------------------------------- #
-        self.listFrame = PersonListWidget(self.main, self.configData, self.data)
+        self.listFrame = TableWidget(self.main)
         self.listFrame.setContentsMargins(0,0,0,0)
-        self.listFrame.refreshBackground()
 
-        self.persFrame = PersonWidget(self.main, self.configData, self.data)
+        self.persFrame = PersonWidget(self.main, self.data)
         self.persFrame.refreshBackground()
 
         statusFrame = QFrame()
@@ -55,29 +53,19 @@ class MainWidget(QWidget):
         self.setLayout(self.layout)
     def setGraphList(self, graphList):
         self.graphList = graphList
-    def setPerson(self, id):
-        self.listFrame.setPerson(id)
+    def setPerson(self, id, with_list = True):
+        if with_list:
+            self.listFrame.select_persID(id)
         self.persFrame.setPerson(id)
         # self.graphList.setPerson(id)
     def setPersonNoList(self, id):
         self.persFrame.setPerson(id)
         self.graphList.setPerson(id)
     def setPersonNoGraph(self, id):
-        self.listFrame.setPerson(id)
+        self.listFrame.set_person(id)
         self.persFrame.setPerson(id)
-    def addPerson(self):      
-        # Called by PersonWidget after pushing button #
-          
-        # Get new ID #
-        id = self.data.addPerson()
-        
-        # Add Perosn in PersonList #
-        self.listFrame.addPerson(id)
-        
-        # Set the new (empty) person having Focus #
-        self.setPerson(id)
     def clearWidgets(self):
-        self.listFrame.clearTable()
+        self.listFrame.clear_table()
         self.persFrame.clearPerson()
         self.graphList.clear()
     def closeGraphs(self):

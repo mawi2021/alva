@@ -1,22 +1,21 @@
-# TODO: check, which imports are really necessary
 from genericpath import exists
 from pickle import FALSE
-import sys, os, chardet
+import os, chardet
 from PyQt5.QtWidgets import QInputDialog, QFileDialog, QMessageBox
 from PyQt5.QtCore import QStringListModel
 import json
 import pandas
+import sqlite3
 import time
 from dateutil.parser import parse
-
-# TODO: zu allen Log-Calls (z.B. self._addToLog()) Setter schreiben 
 
 class Data():
 
     def __init__(self, main, configData):
         super(Data, self).__init__()
-        self.main   = main
+        self.main       = main
         self.configData = configData
+        self.conn       = None
         
         self.logFilename = self.configData["persLog"]
 
@@ -62,9 +61,49 @@ class Data():
         f = open(fileName, 'w', encoding=self.configData["encoding"])
         json.dump(self.jData, f, indent=4, ensure_ascii=False)
         f.close()
-        
-        # Fill helper list for fast Access of jData #
-        self._fillHelperLists()
+
+        # Create database file and create tables #
+        self.conn = sqlite3.connect(self.configData["projectDir"] + "/" + projectName + ".db") 
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS INDI (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            GIVN      TEXT,
+            SURN      TEXT,
+            SEX       TEXT,
+            BIRT_DATE TEXT,
+            BIRT_PLAC TEXT,
+            DEAT_DATE TEXT,
+            DEAT_PLAC TEXT,
+            url       TEXT,
+            comment   TEXT,
+            FAMC      TEXT
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS FAM (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            HUSB      INTEGER,
+            WIFE      INTEGER,
+            MARR_DATE TEXT,
+            MARR_PLAC TEXT,
+            comment   TEXT
+        )
+        """)
+
+        # Create Data
+        # cursor.execute("INSERT INTO personen (name, alter) VALUES (?, ?)", ("Alice", 30))
+        # cursor.execute("INSERT INTO personen (name, alter) VALUES (?, ?)", ("Bob", 25))
+        # conn.commit()  # Änderungen speichern
+
+        # Select Data
+        # cursor.execute("SELECT id, name, alter FROM personen")
+        # for row in cursor.fetchall():
+        #     print(row)
+
+        # Close Connection
+        # conn.close()
+
     def openProject(self):
         print("Data.openProject")
 
@@ -122,12 +161,13 @@ class Data():
         # Fill PersonListWidget (Table) from columns, which are actually shown
         data = self._selectPersonList()
         if len(data) > 0:
-            self.main.widget.listFrame.fillTable(data)
-            self.main.widget.setPerson(self.jData["INDI"][0]["id"])      
+            self.main.fill_table(data)
+            self.main.resize_table_columns()
+            self.main.widget.setPerson(self.jData["INDI"][0]["id"])    
         else:
             self.main.widget.clearWidgets()
             # Create Person, if none is available #
-            self.main.widget.addPerson()
+            self.main.on_new_person()
 
     # ----- Import / Export ----- #
     def importData(self):
@@ -1420,6 +1460,17 @@ class Data():
                     if idF != "":
                         return True, idF
         return False, ""
+    def get_finished(self, persID):
+        idx = self.helperPersList.get(persID,"")
+        if idx == "": 
+            return False
+
+        if "finished" in self.jData["INDI"][idx]:
+            return self.jData["INDI"][idx]["finished"]
+        else:
+            return False
+    def get_first_persID(self):
+        return self.jData["INDI"][0]["id"]
     def getMarriageDate(self, id, idx):
         ret, pers = self.getPerson(id)
         if ret:
@@ -1617,12 +1668,26 @@ class Data():
             if len(partners) > 0:
                 return True, partners
         return False, []
-    def getPerson(self,id):
+    def getPersonForDrawBox(self, id):
+        # Called from GraphAncestor
+        pers = {}
+        ret, pers["name"]  = self.getName(id)       # {"firstname":.., "surname":..}
+        pers["name"]["firstname"] = pers["name"].get("firstname","")
+        pers["name"]["surname"] = pers["name"].get("surname","")
+        ret, pers["birth"] = self.getBirthData(id)  # {"date":.., "place":..}
+        pers["birth"]["date"] = pers["birth"].get("date","")
+        pers["birth"]["place"] = pers["birth"].get("place","")
+        ret, pers["death"] = self.getDeathData(id)  # {"date":.., "place":..}
+        pers["death"]["date"] = pers["death"].get("date","")
+        pers["death"]["place"] = pers["death"].get("place","")
+        ret, pers["sex"]   = self.getSex(id)        # sex
+        return pers
+    def getPerson(self, id):
         # called from PersonWidget.py #
         if id in self.helperPersList:
             return True, self.jData["INDI"][self.helperPersList[id]]
         return False, {}
-    def getPersonForTable(self,id):
+    def get_person_for_table(self,id):
         if self.helperPersList.get(id) == None:
             return
             
@@ -1635,7 +1700,6 @@ class Data():
                 break
         
         line = []
-        
         for key in fields:
             
             if key in pers:
@@ -1652,10 +1716,8 @@ class Data():
                         line.append("")
                 else:
                     line.append("")
-                    
             else:
                 line.append("")
-        
         return line
     def getPersonIdx(self,id):
         # called from PersonWidget.py #
@@ -1871,6 +1933,14 @@ class Data():
 
         childObj["FAMC"] = famID
         self._addToLog(childID, "FAMC", famID, "+")        
+    def set_finished(self, persID, value):
+        idx = self.helperPersList.get(persID,"")
+        if idx == "": return
+
+        # Logging #
+        self._addToLog(id, "finished", value, "+")
+
+        self.jData["INDI"][idx]["finished"] = value
     def setFirstname(self, id, value):
         idx = self.helperPersList.get(id,"")
         if idx == "": return
@@ -2022,9 +2092,8 @@ class Data():
         self.helperFamList[famID] = len(self.jData["FAM"]) - 1 
         
         return famID
-    def addPerson(self):
+    def add_person(self):
         # Called from MainWidget.py #
-
         id = self.getNextPersonId()  
 
         # Logging #
@@ -2048,7 +2117,7 @@ class Data():
         
         # Remove Parent #
         if parentID == "":
-            self.unassignParent(self, childID, who)
+            self.unassignParent(childID, who)
             return
             
         # CHECKS: does parent exist?  #
@@ -2125,6 +2194,71 @@ class Data():
         self.setFamilyChild(famID, childID)
         
         return True
+    def copy_person(self, fromID):
+        ret, data = self.getPerson(fromID)
+        if not ret:
+            return -1
+        
+        newID = self.getNextPersonId()        
+        data_new = {}
+
+        for key in data:
+            if key == "id":
+                data_new["id"] = newID
+                continue
+            elif key == "FAMS":
+                continue # new person cannot have the same children
+            elif key == "FAMC":
+                for fam in self.jData["FAM"]:
+                    if fam["id"] == data["FAMC"]:
+                        fam["CHIL"].append(newID) # add new person to the same family as child
+            
+            if isinstance(data[key],dict):
+                data_new[key] = {}
+                for inner in data[key]:
+                    data_new[key][inner] = data[key][inner]
+            else:
+                data_new[key] = data[key]
+
+        # fill data and helper #
+        self.jData["INDI"].append(data_new)
+        self.helperPersList[newID] = len(self.jData["INDI"]) - 1
+
+        return newID
+    def delete_person(self, persID):
+        ret, data = self.getPerson(persID)
+        if not ret:
+            return
+
+        if "FAMS" in data:                # person is WIFE or HUSB in this family
+            for fam in self.jData["FAM"]:
+                if fam["id"] in data["FAMS"]:
+                    if fam["WIFE"] == persID:
+                        fam.pop("WIFE")
+                    elif fam["HUSB"] == persID:
+                        fam.pop("HUSB")
+
+        if "FAMC" in data:                # person is CHIL in this family
+            for fam in self.jData["FAM"]:
+                if fam["id"] == data["FAMC"]:
+                    for i in range(len(fam["CHIL"])):
+                        if fam["CHIL"][i] == persID:
+                            fam["CHIL"].pop(i)
+                            break
+
+        cnt = -1
+        for pers in self.jData["INDI"]:  # Delete INDI 
+            cnt = cnt + 1
+            if pers["id"] == persID:
+                self.jData["INDI"].pop(cnt)
+                break
+
+        old_idx = self.helperPersList[persID] # Delete from helper
+        self.helperPersList.pop(persID)  
+        for id in self.helperPersList:
+            if self.helperPersList[id] > old_idx:
+                self.helperPersList[id] = self.helperPersList[id] - 1
+
     def _deleteFamilyIfPossible(self, famID):                                         
         ret, famObj = self.getFamily(famID)
         if not ret: return
@@ -2168,7 +2302,7 @@ class Data():
                 self.helperFamList[obj.get("id")] = cnt
                 cnt = cnt + 1        
     def onExit(self):
-        # Called from main.py #
+        self.conn.close()
         return self._updateFromLog(1)
     def removeChildFromFamily(self, childID):
         ret, childObj = self.getPerson(childID)
@@ -2245,12 +2379,9 @@ class Data():
         
         for pers in self.jData["INDI"]:
             line = []
-            
             for key in fields:
-                
                 if key in pers:
                     line.append(pers[key])
-                    
                 elif key.find(">") > 0:
                     pos = key.find(">")
                     pre = key[0:pos]
@@ -2262,12 +2393,9 @@ class Data():
                             line.append("")
                     else:
                         line.append("")
-                        
                 else:
                     line.append("")
-                    
             tabData.append(line)
-            
         return tabData
     def unassignParent(self, childID, who):
         fatherID, motherID = self.getParentsIDs(childID)
@@ -2316,7 +2444,7 @@ class Data():
         
         self._deleteFamilyIfPossible(fid)
     def createTreeAncestors(self, id): # Vorfahren
-        idList = {id: {"idFather": 0, "idMother": 0, "x": 0, "y": 0}}
+        idList = {id: {"idFather": "", "idMother": "", "x": 0, "y": 0, "done": False}}
         lineList = []
         cnt = 0
         minYear = 9999
@@ -2324,24 +2452,34 @@ class Data():
 
         # Get all involved people
         while True:
-            obj = idList[cnt]
-            pid = obj["id"]
-            idFather, idMother = self.getParentsIDs(pid)
-            if idFather != "":
-                obj["idFather"] = idFather
-                idList[idFather] = {"idFather": 0, "idMother": 0, "idChild": pid, "x": 0, "y": 0}
-                lineList.append([pid,idFather])
-            if idMother != "":
-                obj["idMother"] = idMother
-                idList[idMother] = {"idFather": 0, "idMother": 0, "idChild": pid, "x": 0, "y": 0}
-                lineList.append([pid,idMother])
+            newIdList = {}
+            for pid in idList:
+                obj = idList[pid]
+                if obj["done"]: continue
 
-            cnt = cnt + 1
-            if cnt >= len(idList):
-                break
+                idFather, idMother = self.getParentsIDs(pid)
+                if idFather != "":
+                    obj["idFather"] = idFather
+                    newIdList[idFather] = {"idFather": "", "idMother": "", "idChild": pid, "x": 0, "y": 0, "done": False}
+                    lineList.append([pid,idFather])
+                if idMother != "":
+                    obj["idMother"] = idMother
+                    newIdList[idMother] = {"idFather": "", "idMother": "", "idChild": pid, "x": 0, "y": 0, "done": False}
+                    lineList.append([pid,idMother])
+
+                obj["done"] = True
+
+            # Append new entries to original list
+            for pid in newIdList:
+                obj = newIdList[pid]
+                idList[pid] = obj
+
+            # Step out criteria from loop
+            if len(newIdList) == 0: break
 
         # Add birth year
         for pid in idList:
+            obj = idList[pid]
             year = ""
             ret, birth = self.getBirthData(pid)
             if ret:
@@ -2351,26 +2489,33 @@ class Data():
                 try:
                     birth = parse(year, fuzzy=False)
                     year = birth.year
+                    obj["year"] = year
+                    if minYear > year: minYear = year
+                    if maxYear < year: maxYear = year
+                    print(pid + " " + str(year) + " - " + self.getPersStr(pid))
                 except ValueError:
-                    year = ""
+                    year = 0
 
-            # Find "Line" with pid as second value => assume, mother/father is 20 years older than child
-            if year == "":
+        found = True
+        while found:
+            for pid in idList:
                 found = False
-                for line in lineList:
-                    if line[1] == pid:
-                        childId = line[0]
-                        for pers in idList:
-                            if pers["id"] == childId:
-                                year = pers["year"] - 20
+                obj = idList[pid]
+                if obj.get("year", 0) == 0:
+                # Find "Line" with pid as second value => assume, mother/father is 20 years older than child
+                    for line in lineList:
+                        if line[1] == pid:
+                            childId = line[0]
+                            objC = idList[childId]
+                            year = objC.get("year", 0) - 20
+                            if year > 0: 
+                                obj["year"] = year
+                                if minYear > year: minYear = year
+                                if maxYear < year: maxYear = year
+                                print(pid + " " + str(year) + " - " + self.getPersStr(pid))
                                 found = True
-                                break
-                    if found: break
+                            break
                         
-            obj["year"] = year
-            if minYear > year: minYear = year
-            if maxYear < year: maxYear = year
-            print(pid + " " + str(year) + " - " + self.getPersStr(pid))
 
         print("Jahre: " + str(minYear) + " - " + str(maxYear))
         maxYear += 40 # Damit die jüngste Person aufs "Papier" passt

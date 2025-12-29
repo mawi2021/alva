@@ -41,6 +41,20 @@ class Config():
         if "persLog" not in self.jData:
             self.jData["persLog"] = "logs/pers.log"
 
+    def get_conf_table_fields(self):
+        return self.jData["personListFields"]
+    def get_current_project(self):
+        return self.jData["currProject"]
+    def get_table_col_number(self, fieldname):
+        col = -1
+        for key in self.jData["personListFields"]:
+            col = col + 1
+            if key == fieldname:
+                return col
+        return -1
+    def is_field_in_table(self, fieldname):
+        return fieldname in self.jData["personListFields"]
+
     def onExit(self):
         # Called from main.py #
         f = open(self.filename, 'w', encoding='utf8')

@@ -12,21 +12,15 @@ class GraphAncestor(QMainWindow):
         super().__init__()
         self.main       = main
         self.data       = data
-
-        self.gedWindow  = QMainWindow()
         self.rootPid    = ""
-        self.boxNumMax  = 0
-        self.xMitte     = 0
-        self.yMitte     = 0
-        self.yRootMitte = 0
-        self.xRootMitte = 0
         
         # each record includes: x, y, sex, mother (id), father (id), partners (list)
         # each partner record includes: fam_id, id, sex
-        self.boxList  = idList
-        self.lineList = lineList
-        self.minYear  = minYear
-        self.maxYear  = maxYear
+        self.boxList    = idList
+        self.lineList   = lineList
+        self.minYear    = minYear
+        self.maxYear    = maxYear
+        self.dotPerYear = 6
         
         self.lineHeight = 14
         self.margin     = 10
@@ -35,7 +29,7 @@ class GraphAncestor(QMainWindow):
 
         self.boxWidth       = 180
         self.boxOffset      = 50
-        self.windowOffset   = 10
+        self.windowOffset   = 100
         self.shortBoxHeight = int(4 * self.lineHeight + 0.5 * self.margin)
         self.boxHeight      = int(9 * self.lineHeight + 0.5 * self.margin)
         self.doNotRepaint   = False
@@ -55,7 +49,7 @@ class GraphAncestor(QMainWindow):
 
         self._calcCoords()
 
-        self.setGeometry(400, 400, self.xMax, self.yMax)
+        self.setGeometry(400, 400, 1200, 800)   # self.xMax, self.yMax)
         self.label = QLabel()
         self.pixmap = QPixmap(self.xMax, self.yMax)
         self.label.setPixmap(self.pixmap)
@@ -82,21 +76,28 @@ class GraphAncestor(QMainWindow):
         painter.setBrush(brush)
         painter.setPen(self.fontColor)
 
+        # Drawings independent on boxes:
         painter.drawRect(0, 0, int(self.xMax - 20), int(self.yMax - 20))
-        
-        # self.paint(event, painter)
+        painter.drawLine(50, 0, 50, self.yMax)
+        for i in range((self.maxYear - self.minYear), self.maxYear, 10):
+            j = round(i/10) * 10
+            y = self.boxOffset + (j - self.minYear) * self.dotPerYear
+            painter.drawLine(45, y, 55, y)
+            painter.drawText(10, y, str(j))
+
+        self.paint(event, painter)
 
         painter.end()   # new
     def paint(self, event, painter): 
         for pid in self.boxList:
-            self.paintBox(painter, pid)
             print(pid)
+            self.paintBox(painter, pid)
 
         for line in self.lineList:
-            boxL = self.boxList[line["boxLeft"]]
-            boxR = self.boxList[line["boxRight"]]
-            painter.drawLine(boxL["x"] + self.boxWidth, boxL["y"] + int(self.shortBoxHeight / 2),
-                             boxR["x"],                 boxR["y"] + int(self.shortBoxHeight / 2))
+            boxL = self.boxList[line[0]]
+            boxR = self.boxList[line[1]]
+            painter.drawLine(int(boxL["x"] + self.boxWidth / 2), boxL["y"],
+                             int(boxR["x"] + self.boxWidth / 2), boxR["y"] + self.shortBoxHeight)
     def paintBox(self, painter, pid):
 
         box = self.boxList[pid]
@@ -115,174 +116,154 @@ class GraphAncestor(QMainWindow):
         # colored box
         painter.drawRect(x, y, self.boxWidth, self.shortBoxHeight)
 
-        # Bloodline
-        if box["relation"] in ["Opa", "Oma", "Vater", "Mutter", "Sohn", "Tochter", "Enkelsohn", 
-                              "Enkeltochter"]:
-            painter.setPen(self.frameColorBloodline)
-            painter.drawRect(x-2, y-2, self.boxWidth + 4, self.shortBoxHeight + 2)
-            painter.drawRect(x-1, y-1, self.boxWidth + 2, self.shortBoxHeight)
-
-        painter.setPen(self.fontColor)
-
         # 2 lines with the name
-        ret, nameArr = self.data.getName(pid)
+        painter.setPen(self.fontColor)
         painter.setFont(QFont(self.fontFace, self.fontSize, QFont.ExtraBold))
-        if ret:
-            if box["relation"] == "":
-                text = nameArr["firstname"]
-            else:
-                text = "(" + box["relation"] + ") " + nameArr["firstname"]
-            painter.drawText( x + self.margin, y + line * self.lineHeight, text )  # Vorname
-            line = line + 1
-        if len(nameArr) > 1:
-            painter.drawText(
-                x + self.margin, y + line * self.lineHeight, nameArr["surname"]
-            )  # Nachname
+        text = box["name"]["firstname"]
+        painter.drawText( x + self.margin, y + line * self.lineHeight, text )  # Vorname
+        line = line + 1
+        painter.drawText( x + self.margin, y + line * self.lineHeight, box["name"]["surname"])  # Nachname
 
         # ID 
         painter.drawText(x - self.margin, y + int((line - 2.3) * self.lineHeight), pid[2:-1])
 
         # Birth
         line = line + 1
-        ret, eventArr = self.data.getBirthData(pid)  # date - place 
         painter.setFont(QFont(self.fontFace, self.fontSize, QFont.Normal))
-        if ret:
-            painter.drawText(
-                x + self.margin,
-                y + line * self.lineHeight,
-                "* " + eventArr["date"] + " " + eventArr["place"],
-            )
+        painter.drawText(
+            x + self.margin,
+            y + line * self.lineHeight,
+            "* " + box["birth"]["date"] + " " + box["birth"]["place"],
+        )
 
         # Death
         line = line + 1
-        ret, eventArr = self.data.getDeathData(pid)  # date - place - source
-        if ret:
-            painter.drawText(
-                x + self.margin,
-                y + line * self.lineHeight,
-                "+ " + eventArr["date"] + " " + eventArr["place"],
-            )
+        painter.drawText(
+            x + self.margin,
+            y + line * self.lineHeight,
+            "+ " + box["death"]["date"] + " " + box["death"]["place"],
+        )
 
-        # ---------------------- *
-        # Show all Partners here *
-        # ---------------------- *
+        # # ---------------------- *
+        # # Show all Partners here *
+        # # ---------------------- *
                 
-        # Partner
-        if box["partners"]:
-            cnt = 0
-            for partnerPid in box["partners"]:
-                cnt = cnt + 1
-                y2 = y + cnt * self.shortBoxHeight + 1
-                line = 1
+        # # Partner
+        # if box["partners"]:
+        #     cnt = 0
+        #     for partnerPid in box["partners"]:
+        #         cnt = cnt + 1
+        #         y2 = y + cnt * self.shortBoxHeight + 1
+        #         line = 1
                 
-                ret, sex = self.data.getSex(partnerPid)
-                if ret and sex == "m":
-                    painter.setBrush(QBrush(self.colorMan, Qt.SolidPattern))
-                    painter.setPen(self.frameColorMan)
-                else:
-                    painter.setBrush(QBrush(self.colorWoman, Qt.SolidPattern))
-                    painter.setPen(self.frameColorWoman)
-                painter.drawRect(x, y2, self.boxWidth, self.shortBoxHeight)
+        #         ret, sex = self.data.getSex(partnerPid)
+        #         if ret and sex == "m":
+        #             painter.setBrush(QBrush(self.colorMan, Qt.SolidPattern))
+        #             painter.setPen(self.frameColorMan)
+        #         else:
+        #             painter.setBrush(QBrush(self.colorWoman, Qt.SolidPattern))
+        #             painter.setPen(self.frameColorWoman)
+        #         painter.drawRect(x, y2, self.boxWidth, self.shortBoxHeight)
                 
-                painter.setPen(self.partnerFontColor)
+        #         painter.setPen(self.partnerFontColor)
 
-                # Marriage
-                fam = self.data.getFamilyForPair(pid,partnerPid)
-                ret, marrStruc = self.data.getMarriageForFam(fam)
-                if ret:
-                    text = "oo " + marrStruc["date"] + " " + marrStruc["place"]
-                else:
-                    text = "oo"
-                painter.drawText( x + self.margin, y2 + line * self.lineHeight, text )
+        #         # Marriage
+        #         fam = self.data.getFamilyForPair(pid,partnerPid)
+        #         ret, marrStruc = self.data.getMarriageForFam(fam)
+        #         if ret:
+        #             text = "oo " + marrStruc["date"] + " " + marrStruc["place"]
+        #         else:
+        #             text = "oo"
+        #         painter.drawText( x + self.margin, y2 + line * self.lineHeight, text )
                 
-                # Name
-                ret, nameArr = self.data.getName(partnerPid)
-                if ret:
-                    line = line + 1
-                    painter.setFont(QFont(self.fontFace, self.fontSize, QFont.ExtraBold))
-                    painter.drawText(
-                        x + self.margin,
-                        y2 + line * self.lineHeight,
-                        nameArr["firstname"] + " " + nameArr["surname"],
-                    )
+        #         # Name
+        #         ret, nameArr = self.data.getName(partnerPid)
+        #         if ret:
+        #             line = line + 1
+        #             painter.setFont(QFont(self.fontFace, self.fontSize, QFont.ExtraBold))
+        #             painter.drawText(
+        #                 x + self.margin,
+        #                 y2 + line * self.lineHeight,
+        #                 nameArr["firstname"] + " " + nameArr["surname"],
+        #             )
                     
-                # Birth
-                ret, eventArr = self.data.getBirthData(partnerPid)  # date - place - source
-                if ret:
-                    line = line + 1
-                    painter.setFont(QFont(self.fontFace, self.fontSize, QFont.Normal))
-                    painter.drawText(
-                        x + self.margin,
-                        y2 + line * self.lineHeight,
-                        "* " + eventArr["date"] + " " + eventArr["place"],
-                    )
+        #         # Birth
+        #         ret, eventArr = self.data.getBirthData(partnerPid)  # date - place - source
+        #         if ret:
+        #             line = line + 1
+        #             painter.setFont(QFont(self.fontFace, self.fontSize, QFont.Normal))
+        #             painter.drawText(
+        #                 x + self.margin,
+        #                 y2 + line * self.lineHeight,
+        #                 "* " + eventArr["date"] + " " + eventArr["place"],
+        #             )
                     
-                # Death
-                ret, eventArr = self.data.getDeathData(partnerPid)  # date - place - source
-                if ret:
-                    line = line + 1
-                    painter.drawText(
-                        x + self.margin,
-                        y2 + line * self.lineHeight,
-                        "+ " + eventArr["date"] + " " + eventArr["place"],
-                    )
-        painter.setPen(self.fontColor)
+        #         # Death
+        #         ret, eventArr = self.data.getDeathData(partnerPid)  # date - place - source
+        #         if ret:
+        #             line = line + 1
+        #             painter.drawText(
+        #                 x + self.margin,
+        #                 y2 + line * self.lineHeight,
+        #                 "+ " + eventArr["date"] + " " + eventArr["place"],
+        #             )
+        # painter.setPen(self.fontColor)
 
-        # extra frame for setting this person as a central person
-        if pid == self.rootPid:
-            painter.setPen(self.centralColor)
-            painter.setBrush(QBrush(Qt.NoBrush))
-            for i in range(0,4):
-                painter.drawRect(x - i, y - i, self.boxWidth + 2, self.shortBoxHeight + 2)
+        # # extra frame for setting this person as a central person
+        # if pid == self.rootPid:
+        #     painter.setPen(self.centralColor)
+        #     painter.setBrush(QBrush(Qt.NoBrush))
+        #     for i in range(0,4):
+        #         painter.drawRect(x - i, y - i, self.boxWidth + 2, self.shortBoxHeight + 2)
 
         return
-    def calcCoords(self):
+    def _calcCoords(self):
         # Simple approach; optimization is a later step #
-        xMax = self.windowOffset
-        for box in self.boxList:
-            # upper left corner
-            if box["idFather"] == 0 and box["idMother"] == 0:
-                box["x"] = xMax
-                xMax = xMax + self.boxWidth + self.boxOffset
-        
-        # adjust child in the middle below parents
+        self.xMax = self.windowOffset
         for pid in self.boxList:
             box = self.boxList[pid]
-            if box["x"] > 0:
-                continue
 
-            idFather = box["idFather"]
-            if idFather != "":
-                if self.boxList[idFather]["x"] == 0:
+            # y-Coordinate - start with upper left corner
+            box["y"] = self.boxOffset + (box["year"] - self.minYear) * self.dotPerYear
+
+            # x-Coordinate - start with upper left corner
+            if box["idFather"] == "" and box["idMother"] == "":
+                box["x"] = self.xMax
+                self.xMax = self.xMax + self.boxWidth + self.boxOffset
+
+            # Person Data
+            pers = self.data.getPersonForDrawBox(pid)
+            box["name"]  = pers["name"]
+            box["birth"] = pers["birth"]
+            box["death"] = pers["death"]
+            box["sex"]   = pers["sex"]
+        
+        # adjust child in the middle below parents
+        found = True
+        while found:
+            found = False
+            for pid in self.boxList:
+                box = self.boxList[pid]
+                if box["x"] > 0:
                     continue
 
-            idMother = box["idMother"]
-            if idMother != "":
-                if self.boxList[idMother]["x"] == 0:
-                    continue            
+                idFather = box["idFather"]
+                if idFather != "":
+                    if self.boxList[idFather]["x"] == 0:
+                        continue
 
-            # adjust
-            if   idFather == "": box["x"] = self.boxList[idMother]["x"]
-            elif idMother == "": box["x"] = self.boxList[idFather]["x"]
-            else: box["x"] = ( self.boxList[idFather]["x"] + self.boxList[idMother]["x"] ) / 2
+                idMother = box["idMother"]
+                if idMother != "":
+                    if self.boxList[idMother]["x"] == 0:
+                        continue            
 
-        years = []
-        coveredYears = 6
-
-        # for box in self.boxList:
-        #     # How many Boxes side by side?
-        #     for i in range [0:coveredYears]:
-        #         years[box["year"] + i] += 1
-            
-        #     if box["x"] == "":
-        #         box["x"] = 0
-
-        #     # Father
-        #     if box.get("idFather","") == "":
-                
-        #     # Mother
-
+                # adjust
+                if   idFather == "": box["x"] = self.boxList[idMother]["x"]
+                elif idMother == "": box["x"] = self.boxList[idFather]["x"]
+                else: box["x"] = int(( self.boxList[idFather]["x"] + self.boxList[idMother]["x"] ) / 2)
+                found = True
         
+        self.yMax = 2 * self.boxOffset + (self.maxYear - self.minYear) * self.dotPerYear + self.boxHeight
     def clearGraph(self):
         # self.person["Grandparents"]   = []
         # self.person["Parents"]        = []  # List of pids
@@ -295,11 +276,6 @@ class GraphAncestor(QMainWindow):
         # self.label.pixmap().fill(self.backgroundColor)
         # self.update();
         self.main.graphList.update()
-
-
-    def calcCoords(self):   #TODO
-        self.xMax = 1000
-        self.yMax = 800
     def setAncestor(self, idList, lineList, minYear, maxYear):
         #called from PersonWidget.py
         self.idList   = idList

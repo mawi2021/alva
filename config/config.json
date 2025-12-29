@@ -2,6 +2,7 @@
     "encoding": "utf-8",
     "personListFields": {
         "id": "ID",
+        "finished": "Fertig",
         "NAME>SURN": "Nachname",
         "NAME>GIVN": "Vorname",
         "BIRT>DATE": "Geb. Datum",
@@ -11,6 +12,6 @@
     },
     "projectDir": "data",
     "persLog": "logs/pers.log",
-    "currProject": "Wettiner",
-    "currProjectFile": "data/Wettiner.json"
+    "currProject": "Griechische Götter",
+    "currProjectFile": "data/Griechische Götter.json"
 }
