@@ -1,31 +1,259 @@
-from genericpath import exists
-from pickle import FALSE
 import os, chardet
 from PyQt5.QtWidgets import QInputDialog, QFileDialog, QMessageBox
-from PyQt5.QtCore import QStringListModel
 import json
-import pandas
 import sqlite3
-import time
-from dateutil.parser import parse
 
 class Data():
 
     def __init__(self, main, configData):
         super(Data, self).__init__()
-        self.main       = main
-        self.configData = configData
-        self.conn       = None
+        self.main         = main
+        self.configData   = configData
+        self.conn         = None
+        self.cursor       = None
+        self.indi_columns = []
+        self.fam_columns  = []
+
+    def convert_data_format_json_to_db(self, file):
+        # ----- Figure out codepage of file ----- #
+        bytes = min(32, os.path.getsize(file))
+        raw = open(file, 'rb').read(bytes)
+        result = chardet.detect(raw)
+        encoding = result['encoding']
         
-        self.logFilename = self.configData["persLog"]
+        if encoding == "ascii": encoding = "utf-8"
 
-        self.jData  = {}
-        self.helperPersList = {}
-        self.helperFamList  = {}
-        self.helperNoteList = {}
+        # ----- Read Data ----- #
+        with open(file, encoding=encoding) as f:
+            jData = json.load(f)
+        f.close()
 
-    # ----- Project ----- #
-    def newProject(self):
+        # Conversion #
+        for table in jData:
+            if table == "INDI":
+                for person in jData[table]:
+                    if "id" in person:
+                        persID = int(person["id"][2:-1])
+                        self.create_person(persID)
+                        for key in person:
+                            if key == "id": continue
+                            if key == "NAME":
+                                for sub_key in person[key]:
+                                    self.set_indi_attribute(persID, sub_key, person[key][sub_key])
+                            elif key == "BIRT":
+                                for sub_key in person[key]:
+                                    self.set_indi_attribute(persID, "BIRT_" + sub_key, person[key][sub_key])
+                            elif key == "DEAT":
+                                for sub_key in person[key]:
+                                    self.set_indi_attribute(persID, "DEAT_" + sub_key, person[key][sub_key])
+                            elif key in ("SEX", "comment", "finished", "media", "source", "url"):
+                                self.set_indi_attribute(persID, key, person[key])
+                            elif key in ("FAMC", "FAMS"):
+                                pass  # no message
+                            else:
+                                print("UNKNOWN key in INDI: " + key)
+                    else:
+                        print("NO 'id' in INDI")
+                        
+            elif table == "FAM":
+                for family in jData[table]:
+                    if "id" in family:
+                        children = []
+                        father = mother = ""
+                        famID = int(family["id"][2:-1])
+                        self.create_family(famID)
+                        for key in family:
+                            if key == "id": continue
+                            if key in ("WIFE", "HUSB"):
+                                value = int(family[key][2:-1])
+                                self.set_fam_attribute(famID, key, value)
+                                if key == "WIFE":
+                                    mother = value
+                                elif key == "HUSB":
+                                    father = value
+                            elif key in ("comment"):
+                                self.set_fam_attribute(famID, key, family[key])
+                            elif key == "MARR":
+                                for sub_key in family[key]:
+                                    self.set_fam_attribute(persID, "MARR_" + sub_key, family[key][sub_key])
+                            elif key == "CHIL":
+                                children = family[key]
+                            else:
+                                print("UNKNOWN key in FAM: " + key)
+                        for child in children:
+                            if father != "":
+                                self.set_indi_attribute(int(child[2:-1]), "father", father)
+                            if mother != "":
+                                self.set_indi_attribute(int(child[2:-1]), "mother", mother)
+            else:
+                print("UNKNOWN TABLE: " + table)
+    def convert_data_format_csv_to_db(self, file): # field separator in csv is "#§" and no " around fields; no header line
+        # ----- Figure out codepage of file ----- #
+        bytes = min(32, os.path.getsize(file))
+        raw = open(file, 'rb').read(bytes)
+        result = chardet.detect(raw)
+        encoding = result['encoding']
+        
+        if encoding == "ascii": encoding = "utf-8"
+
+        # ----- Read Data ----- #
+        line_old = ""
+        tab_fields = "id,GIVN,SURN,SEX,BIRT_DATE,BIRT_PLAC,DEAT_DATE,DEAT_PLAC,url,comment,source," + \
+                     "father,mother,birthname,no_child,guess_birth,guess_death"
+        with open(file, encoding=encoding) as f:            
+            for line in f:
+                line = line.strip()
+                if line_old != "":
+                    line = line_old + "\n" + line
+                    line_old = ""
+                fields = line.split("#§")
+                if len(fields) < 25:
+                    line_old = line
+                    continue
+
+                if len(fields) > 25:
+                    print("Conversion error! in line with id " + fields[0])
+                    continue
+
+                # Process data #
+                # 13 #§ehePartner  <= redundant, ignore
+                # 14 #§kinder      <= redundant, ignore
+                print("Processing personID: " + fields[0])
+
+                urls = fields[19] + "\n" + fields[20] + "\n" + fields[21] + "\n" + fields[22]
+                urls = urls.replace("\n\n","\n").replace("\n\n","\n").replace("\n\n","\n")
+
+                source = fields[17]
+                if fields[8] != "" and fields[8] != "0":
+                    source = source + "\nGeburtsregister " + fields[8]
+                if fields[12] != "" and fields[12] != "0":
+                    source = source + "\nSterberegister " + fields[12]
+                source = source.replace("\n\n","\n")
+
+                val_fields = fields[0]  + ",'"  + fields[1]  + "','" + fields[3]  + "','" + fields[4]  + "','" + fields[5] + "','"  \
+                           + fields[7]  + "','" + fields[9]  + "','" + fields[11] + "','" + urls       + "','" \
+                           + fields[18] + "','" + source     + "',"  + fields[15] + ","   + fields[16] + ",'" \
+                           + fields[2]  + "','" + fields[23] + "','" + fields[6]  + "','" + fields[10] + "'"
+
+                self.cursor.execute("INSERT INTO INDI ("+ tab_fields + ") VALUES (" + val_fields + ")")
+                # self.create_person(persID)                                  # 0  id
+                # self.set_indi_attribute(persID, "GIVN", fields[1])          # 1  #§vorname
+                # self.set_indi_attribute(persID, "SURN", fields[3])          # 3  #§nachname
+                # self.set_indi_attribute(persID, "SEX", fields[4])           # 4  #§geschlecht
+                # self.set_indi_attribute(persID, "BIRT_DATE", fields[5])     # 5  #§gebdat
+                # self.set_indi_attribute(persID, "BIRT_PLAC", fields[7])     # 7  #§gebort
+                # self.set_indi_attribute(persID, "DEAT_DATE", fields[9])     # 9  #§sterbedat
+                # self.set_indi_attribute(persID, "DEAT_PLAC", fields[11])    # 11 #§sterbeort
+                # self.set_indi_attribute(persID, "url", urls)                # 19 #§url .. # 22 #§url4
+                # self.set_indi_attribute(persID, "comment", fields[18])      # 18 #§kommentar
+                # media
+                # self.set_indi_attribute(persID, "source", source)           # 17 #§quelle & 8 #§gebRegister & # 12 #§sterbeRegister
+                # self.set_indi_attribute(persID, "finished", "")             # 24 #§inKartei => finished without taking values
+                # self.set_indi_attribute(persID, "father", int(fields[15]))  # 15 #§idvater
+                # self.set_indi_attribute(persID, "mother", int(fields[16]))  # 16 #§idmutter
+                # self.set_indi_attribute(persID, "birthname", fields[2])     # 2  #§gebname
+                # self.set_indi_attribute(persID, "no_child", fields[23])     # 23 #§kinderlos    
+                # self.set_indi_attribute(persID, "guess_birth", fields[6])   # 6  #§gebDatGeraten 
+                # self.set_indi_attribute(persID, "guess_death", fields[10])  # 10 #§sterbeDatGeraten  
+            self.conn.commit()  
+
+        # --------------------------- #
+        # ----- IMPORT MARRIAGE ----- #
+        # --------------------------- #
+        # ----- Get Filename, which is to be imported ----- #
+        fileDlg = QFileDialog()
+        fileStruc = fileDlg.getOpenFileName( self.main, \
+                'Wählen Sie nun noch die zu importierende Datei der Ehen aus', \
+                "MyImport/", \
+                "Gedcom CSV (*.csv);;"
+            )
+        fileName = fileStruc[0]
+
+        # Stop if nothing chosen
+        if fileName == "":
+            return
+        
+        line_old = ""
+        tab_fields = "id,HUSB,WIFE,MARR_DATE,MARR_PLAC,comment"
+        with open(fileName, encoding=encoding) as f:            
+            for line in f:
+                line = line.strip()
+                if line_old != "":
+                    line = line_old + "\n" + line
+                    line_old = ""
+                fields = line.split("#§")
+                if len(fields) < 6:
+                    line_old = line
+                    continue
+
+                if len(fields) > 6:
+                    print("Conversion error! in line with id " + fields[0])
+                    continue
+
+                print("Processing marriageID: " + fields[0])
+                val_fields = fields[0]  + ","  + fields[1]  + "," + fields[2]  + ",'" + fields[3]  + "','" + fields[4] + "','" + fields[5] + "'"
+
+                self.cursor.execute("INSERT INTO FAM ("+ tab_fields + ") VALUES (" + val_fields + ")")
+                # 0  lfdnr      
+                # 1  #§idmann
+                # 2  #§idfrau
+                # 3  #§datum
+                # 4  #§ort
+                # 5  #§kommentar
+            self.conn.commit()  
+    def create_db(self, project_name):
+        self.conn = sqlite3.connect(self.configData["projectDir"] + "/" + project_name + ".db") 
+        self.cursor = self.conn.cursor()
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS INDI (
+            id          INTEGER PRIMARY key,
+            GIVN        TEXT,
+            SURN        TEXT,
+            SEX         TEXT,
+            BIRT_DATE   TEXT,
+            BIRT_PLAC   TEXT,
+            DEAT_DATE   TEXT,
+            DEAT_PLAC   TEXT,
+            url         TEXT,
+            comment     TEXT,
+            media       TEXT,
+            source      TEXT,
+            finished    TEXT,
+            father      INTEGER,
+            mother      INTEGER,
+            birthname   TEXT,
+            no_child    TEXT,
+            guess_birth TEXT,
+            guess_death TEXT
+        )
+        """)
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS FAM (
+            id        INTEGER PRIMARY key,
+            HUSB      INTEGER,
+            WIFE      INTEGER,
+            MARR_DATE TEXT,
+            MARR_PLAC TEXT,
+            comment   TEXT
+        )
+        """)
+        self.get_indi_columns()
+        self.get_fam_columns()
+    def create_family(self, famID = -1):
+        if famID == -1:
+            self.cursor.execute("INSERT INTO FAM DEFAULT VALUES")
+        else:
+            self.cursor.execute("INSERT INTO FAM (id) VALUES (" + str(famID) + ")")
+        self.conn.commit() 
+        return self.cursor.lastrowid
+    def create_person(self, persID = -1):
+        if persID == -1:
+            self.cursor.execute("INSERT INTO INDI DEFAULT VALUES")
+        else:
+            self.cursor.execute("INSERT INTO INDI (id) VALUES (" + str(persID) + ")")
+        self.conn.commit() 
+        return self.cursor.lastrowid
+    def create_project(self):
         if not os.path.exists(self.configData["projectDir"]):
             os.makedirs(self.configData["projectDir"])
 
@@ -37,7 +265,7 @@ class Data():
         while True:
             if not ok: return
 
-            fileName = self.configData["projectDir"] + "/" + projectName + ".json"
+            fileName = self.configData["projectDir"] + "/" + projectName + ".db"
 
             if os.path.isfile(fileName): 
                 txt = "Das Projekt " + projectName + \
@@ -51,132 +279,308 @@ class Data():
             else:
                 break
 
-        self.main.widget.clearWidgets()
+        self.main.clear_widgets()
         self.configData["currProject"] = projectName
-        self.configData["currProjectFile"] = fileName
         self.main.setWindowTitle("Alva - " + projectName)  
-        
-        # Create Project Data File #
-        self.jData = {}
-        f = open(fileName, 'w', encoding=self.configData["encoding"])
-        json.dump(self.jData, f, indent=4, ensure_ascii=False)
-        f.close()
 
         # Create database file and create tables #
-        self.conn = sqlite3.connect(self.configData["projectDir"] + "/" + projectName + ".db") 
-        cursor = self.conn.cursor()
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS INDI (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            GIVN      TEXT,
-            SURN      TEXT,
-            SEX       TEXT,
-            BIRT_DATE TEXT,
-            BIRT_PLAC TEXT,
-            DEAT_DATE TEXT,
-            DEAT_PLAC TEXT,
-            url       TEXT,
-            comment   TEXT,
-            FAMC      TEXT
-        )
-        """)
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS FAM (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            HUSB      INTEGER,
-            WIFE      INTEGER,
-            MARR_DATE TEXT,
-            MARR_PLAC TEXT,
-            comment   TEXT
-        )
-        """)
+        self.create_db(projectName)
+    def copy_person(self, persID):  # only INDI values to be copied, no FAM
+        newID = self.create_person()
+        pers  = self.get_person(persID)
+        for key, value in pers.items():
+            if key == "id": 
+                continue
+            if key in ("father", "mother") and value == "":
+                continue
+            self.set_indi_attribute(newID, key, value)
+        return newID
+    def delete_person(self, persID):
+        self.cursor.execute("DELETE FROM INDI WHERE id = " + str(persID))
+        self.cursor.execute("DELETE FROM FAM WHERE WIFE = " + str(persID))
+        self.cursor.execute("DELETE FROM FAM WHERE HUSB = " + str(persID))
+        self.conn.commit()
+    def get_ancestors(self, persID):
+        ids = {persID:{"child":-1}}    # each record includes: persID: { <table INDI>, partners (list), birth, death, year, child }
+        lines = []                     # each record includes: boxLeft, boxRight
+        min_year = -1
+        max_year = -1
+        if persID == -1:
+            return (ids, lines, min_year, max_year)
 
-        # Create Data
-        # cursor.execute("INSERT INTO personen (name, alter) VALUES (?, ?)", ("Alice", 30))
-        # cursor.execute("INSERT INTO personen (name, alter) VALUES (?, ?)", ("Bob", 25))
-        # conn.commit()  # Änderungen speichern
+        # sequence is important, therefore, add a helper array 
+        helper = [{"id":persID,"child":-1}]
+        while len(helper) > 0:
+            key = helper[0]["id"]
+            person = self.get_person(key)
+            ids[key] = person
+            ids[key]["child"]     = helper[0]["child"]
+            ids[key]["partners"]  = self.get_partners_blood(key)
+            ids[key]["birth"]     = self.main.get_date_line(ids[key]["BIRT_DATE"], ids[key]["BIRT_PLAC"], "*")
+            ids[key]["death"]     = self.main.get_date_line(ids[key]["DEAT_DATE"], ids[key]["DEAT_PLAC"], "†")
+            helper.pop(0)
 
-        # Select Data
-        # cursor.execute("SELECT id, name, alter FROM personen")
-        # for row in cursor.fetchall():
-        #     print(row)
+            # father
+            if ids[key]["father"] != -1:
+                helper.insert(0, {"id":ids[key]["father"], "child":key})
+                lines.append({"boxLeft":key, "boxRight":ids[key]["father"]})
 
-        # Close Connection
-        # conn.close()
+            # mother
+            if ids[key]["mother"] != -1:
+                helper.insert(0, {"id":ids[key]["mother"], "child":key})
+                lines.append({"boxLeft":key, "boxRight":ids[key]["mother"]})
 
-    def openProject(self):
-        print("Data.openProject")
+            # year of birth, min_year, max_year
+            if len(ids[key]["BIRT_DATE"]) > 4:
+                try:
+                    ids[key]["year"] = int(ids[key]["BIRT_DATE"][:4])
+                    if min_year == -1 or min_year > ids[key]["year"]:
+                        min_year = ids[key]["year"]
+                    if max_year == -1 or max_year < ids[key]["year"]:
+                        max_year = ids[key]["year"]
+                except:
+                    ids[key]["year"] = -1
+            else:
+                ids[key]["year"] = -1
+        return (ids, lines, min_year, max_year)
+    def get_children(self, persID):
+        if persID == -1:
+            return []
+        self.cursor.execute("SELECT id FROM INDI WHERE father = " + str(persID) + " or mother = " + str(persID) + " ORDER BY BIRT_DATE DESC")
+        list = []
+        for row in self.cursor.fetchall():
+            list.append(row[0])
+        return list
+    def get_completion_model(self, exclID, sexNot):
+        self.cursor.execute("SELECT id FROM INDI WHERE SEX != '" + sexNot + "' AND id != " + str(exclID) + " ORDER BY GIVN, SURN")
+        list = []
+        for row in self.cursor.fetchall():
+            persID = row[0]
+            line = "ID "+ str(persID) + ": " + self.get_person_string(persID) 
+            list.append(line)
+        return list
+    def get_descendants(self, persID):
+        ids = {}                       # each record includes: persID: { <table INDI>, partners (list), birth, death, year, child }
+        lines = []                     # each record includes: boxLeft, boxRight
+        min_year = -1
+        max_year = -1
+        if persID == -1:
+            return (ids, lines, min_year, max_year)
 
-        items = []
+        # sequence is important, therefore, add a helper array 
+        helper = [{"id":persID}]
+        while len(helper) > 0:
+            key = helper[0]["id"]
+            person = self.get_person(key)
+            ids[key] = person
+            ids[key]["children"]  = self.get_children(key)  # is list [] of children IDs
+            ids[key]["partners"]  = self.get_partners_blood(key)
+            ids[key]["birth"]     = self.main.get_date_line(ids[key]["BIRT_DATE"], ids[key]["BIRT_PLAC"], "*")
+            ids[key]["death"]     = self.main.get_date_line(ids[key]["DEAT_DATE"], ids[key]["DEAT_PLAC"], "†")
+            helper.pop(0)
 
-        # Search for files in "data" subdirectory
-        files = os.listdir(self.configData["projectDir"])
-        for file in files:
-            if file.endswith(".json"):
-                items.append(file.removesuffix(".json"))
+            for child in ids[key]["children"]:
+                helper.insert(0, {"id":child})
+                lines.append({"boxLeft":child, "boxRight":key})  # sequence of boxes is important for line drawing
 
-        if len(items) == 0:
-            QMessageBox.information( 
-                self.main, \
-                "Öffnen nicht möglich", \
-                "Es wurde noch kein Projekt angelegt", \
-                buttons=QMessageBox.Ok
-            )
-            return
+            # year of birth, min_year, max_year
+            if len(ids[key]["BIRT_DATE"]) > 4:
+                try:
+                    ids[key]["year"] = int(ids[key]["BIRT_DATE"][:4])
+                    if min_year == -1 or min_year > ids[key]["year"]:
+                        min_year = ids[key]["year"]
+                    if max_year == -1 or max_year < ids[key]["year"]:
+                        max_year = ids[key]["year"]
+                except:
+                    ids[key]["year"] = -1
+            else:
+                ids[key]["year"] = -1
 
-        item, ok = QInputDialog.getItem(self.main, "Auswahl des Projektes", \
-            "Projekte", items, 0, False)
+        cnt_old = -1
+        cnt = 0
+        while cnt_old != cnt:
+            cnt_old = cnt
+            cnt = 0
+            for key in ids:
+                if ids[key]["year"] == -1:
+                    cnt = cnt + 1
+                    if ids[key]["mother"] != -1 and ids[ids[key]["mother"]]["year"] != -1:
+                        ids[key]["year"] = ids[ids[key]["mother"]]["year"] + 20  # assuming that the year of birth of child is 20 years after mother
+                        cnt = cnt + 1
+                    elif ids[key]["father"] != -1 and ids[ids[key]["father"]]["year"] != -1:
+                        ids[key]["year"] = ids[ids[key]["father"]]["year"] + 20
+                        cnt = cnt + 1
 
-        if not ok:
-            print("  Auswahl abgebrochen")
-            return
+        return (ids, lines, min_year, max_year)
+    def get_fam_attribute(self, famID, attribute):
+        self.cursor.execute("SELECT " + attribute + " FROM FAM WHERE id = " + str(famID))
+        value = ""
+        for row in self.cursor.fetchall():
+            value = row[0]; 
+            if not value: 
+                value = ""
+            # consider integer-type
+            if attribute in ("WIFE", "HUSB"):
+                if value in (None, "", 0) :
+                    return -1
+            break
+        return value
+    def get_fam_columns(self):
+        # Get column names for creation of dictionary
+        self.cursor.execute("PRAGMA table_info(FAM)")
+        self.fam_columns = [row[1] for row in self.cursor.fetchall()]  # column name in index 1
+    def get_family_ids_as_adult(self, persID):
+        self.cursor.execute("SELECT id FROM FAM WHERE HUSB = " + str(persID) + " OR WIFE = " + str(persID) + " ORDER BY id ASC")
+        famIDs = []
+        for row in self.cursor.fetchall():
+            famIDs.append(row[0])
+        return famIDs
+    def get_family_as_adult(self, persID):
+        self.cursor.execute("SELECT * FROM FAM WHERE HUSB = " + str(persID) + " OR WIFE = " + str(persID))
+        fam_rows = []
+        for row in self.cursor.fetchall():
+            fam_rows.append(row)
 
-        if not item:
-            print("Kein Projekt ausgewählt")
-            return
+        objects = []
+        for row in fam_rows:
+            obj = {}
+            obj["id"]         = row[0]
+            obj["partnerID"]  = row[2] if row[1] == persID else row[1]
+            if obj["partnerID"] in (None, "", 0):
+                obj["partnerID"] = -1
+                partner_str = "''"
+            else:
+                partner_str = str(obj["partnerID"])
+            obj["date"]       = row[3]  # Marriage date
+            obj["place"]      = row[4]  # Marriage place 
+            obj["comment"]    = row[5]
+            obj["childrenID"] = []
 
-        print("  Auswahl Projekt: " + item)
-        self.setProject(item)
-    def setProject(self,name):
-        # Called from main.py and internally (openProject) #
-        self.configData["currProjectFile"] = self.configData["projectDir"] + "/" + name + ".json"
-        
-        if ( not os.path.isfile(self.configData["currProjectFile"]) ):
-            self.configData["currProjectFile"] = ""
-            return
-    
-        self.main.setWindowTitle("Alva - " + name)  
-        self.configData["currProject"] = name
+            sel_str = "SELECT id FROM INDI WHERE (father = " + str(persID) + " AND mother = " + partner_str + ") OR " \
+                                                "(mother = " + str(persID) + " AND father = " + partner_str + ")"
+            self.cursor.execute(sel_str)
+            for id in self.cursor.fetchall():
+                obj["childrenID"].append(id[0])
 
-        with open(self.configData["currProjectFile"], encoding=self.configData["encoding"]) as f:
-            self.jData = json.load(f)
-        self._fillHelperLists()
-            
-        # Check log file and update if desired #
-        self._updateFromLog(2)    
+            objects.append(obj)
+                              
+        return objects
+    def get_indi_attribute(self, persID, attribute):
+        if persID == -1:
+            if attribute in ("finished"):  # boolean
+                return False
+            elif attribute in ("father", "mother"):  # IDs
+                return -1
+            else:
+                return ""
 
-        # In case, graphs are open, windows are closed
-        self.main.widget.closeGraphs()
+        self.cursor.execute("SELECT " + attribute + " FROM INDI WHERE id = " + str(persID))
+        value = ""
+        for row in self.cursor.fetchall():
+            value = row[0]; 
+            if not value: 
+                value = ""
+            # consider bool-type
+            if attribute == "finished": 
+                if value == "":
+                    return False
+                else:
+                    return True
+            # consider integer-type
+            if attribute in ("father", "mother"):
+                if value in (None, "", 0):
+                    return -1
+            break
+        return value
+    def get_indi_columns(self):
+        # Get column names for creation of dictionary
+        self.cursor.execute("PRAGMA table_info(INDI)")
+        self.indi_columns = [row[1] for row in self.cursor.fetchall()]  # column name in index 1
+    def get_marriage(self, pers1, pers2): 
+        # Partner via marriage
+        list = []
+        if pers1 in (None, "", 0, -1) and pers2 in (None, "", 0, -1):
+            return list
 
-        # Fill PersonListWidget (Table) from columns, which are actually shown
-        data = self._selectPersonList()
-        if len(data) > 0:
-            self.main.fill_table(data)
-            self.main.resize_table_columns()
-            self.main.widget.setPerson(self.jData["INDI"][0]["id"])    
-        else:
-            self.main.widget.clearWidgets()
-            # Create Person, if none is available #
-            self.main.on_new_person()
-
-    # ----- Import / Export ----- #
-    def importData(self):
+        self.cursor.execute("SELECT * FROM FAM WHERE (HUSB = " + str(pers1) + " AND WIFE = " + str(pers2) + ")" \
+                                                 "OR (HUSB = " + str(pers2) + " AND WIFE = " + str(pers1) + ")")
+        for row in self.cursor.fetchall():
+            line = {}
+            for i in range(len(self.fam_columns)):
+                line[self.fam_columns[i]] = row[i]
+            list.append(line)
+        return list
+    def get_partners_blood(self, persID):                # Partner with same child
+        self.cursor.execute("SELECT DISTINCT father, mother FROM INDI WHERE father = " + str(persID) + " or mother = " + str(persID) + " ORDER BY GIVN, SURN")
+        list = []
+        for row in self.cursor.fetchall():
+            id = row[1] if row[0] == persID else row[0]
+            list.append(id)
+        return list
+    def get_person(self, persID):
+        self.cursor.execute("SELECT * FROM INDI WHERE id = " + str(persID))
+        pers_dict = {}
+        for row in self.cursor.fetchall():
+            for i in range(len(self.indi_columns)):
+                if row[i]:
+                    pers_dict[self.indi_columns[i]] = row[i]
+                else:
+                    pers_dict[self.indi_columns[i]] = ""
+                if self.indi_columns[i] in ("father", "mother"):
+                    if pers_dict[self.indi_columns[i]] in (None, "", 0):
+                        pers_dict[self.indi_columns[i]] = -1
+        return pers_dict
+    def get_person_for_table(self, persID):
+        # List of key fields, which is used for the table #
+        fields = self.configData["personListFields"].keys()
+        fields_str = ", ".join(fields)            
+        self.cursor.execute("SELECT " + fields_str + " FROM INDI WHERE id = " + str(persID))
+        line = []
+        for row in self.cursor.fetchall():
+            line = []
+            i = -1
+            for field in fields:
+                i = i + 1
+                if field in ("father", "mother"):
+                    if row[i] in (None, 0, -1):
+                        line.append("")
+                    else:
+                        line.append(row[i])
+                else:
+                    line.append(row[i])
+        return line
+    def get_persons_for_table(self):
+        fields = self.configData["personListFields"].keys()  # List of key fields, which is used for the table #
+        fields_str = ", ".join(fields)      
+        self.cursor.execute("SELECT " + fields_str + " FROM INDI ORDER BY id")
+        lines = []        
+        for row in self.cursor.fetchall():
+            line = []
+            i = -1
+            for field in fields:
+                i = i + 1
+                if field in ("father", "mother"):
+                    if row[i] in (None, 0, -1):
+                        line.append("")
+                    else:
+                        line.append(row[i])
+                else:
+                    line.append(row[i])
+            lines.append(line)
+        return lines
+    def get_person_string(self, persID):
+        if persID == -1: 
+            return ""
+        obj = self.get_person(persID)
+        line = obj["GIVN"] + " " + obj["SURN"] + " / geb. " + obj["BIRT_DATE"] + " in " + obj["BIRT_PLAC"] + " / gest. " + obj["DEAT_DATE"] + " in " + obj["DEAT_PLAC"] + " "
+        return line
+    def import_data(self):
         # ----- Get Filename, which is to be imported ----- #
         fileDlg = QFileDialog()
         fileStruc = fileDlg.getOpenFileName( self.main, \
                 'Wählen Sie die zu importierende Datei aus', \
                 "MyImport/", \
-                "Gedcom (*.ged);;Excel (*.xlsx);;CSV (*.csv);;Json (*.json)"
+                "Gedcom CSV (*.csv);;(*.json)" #(*.ged);;Excel (*.xlsx);;Json (*.json)"
             )
         fileName = fileStruc[0]
 
@@ -186,17 +590,17 @@ class Data():
 
         # ----- Create new project ----- #
         if self.configData["currProject"] != "":
-            self.main.widget.clearWidgets()
-        self.newProject()
+            self.main.widget.clear_widgets()
+        self.create_project()
         
         # ----- Process Data: convert Files to json ----- #
         if fileName:
             if fileName[-4:] == ".ged":
                 self._convertDataFormatGedToJson(fileName)
             elif fileName[-4:] == ".csv":
-                self._convertDataFormatCsvToJson(fileName)
+                self.convert_data_format_csv_to_db(fileName)
             elif fileName[-5:] == ".json":
-                self._convertDataFormatJsonToJson(fileName)
+                self.convert_data_format_json_to_db(fileName)
             elif fileName[-5:] == ".xlsx":
                 self._convertDataFormatXlsxToJson(fileName)
             else:
@@ -207,19 +611,93 @@ class Data():
                   )
                 return
             
-        # ----- Read json File ----- #
-        with open(self.configData["currProjectFile"], \
-                  encoding=self.configData["encoding"]) as f:
-            self.jData = json.load(f)
-        f.close()
-        self._fillHelperLists()
-
         # ----- Show Data in Table ----- #
-        data = self._selectPersonList()
+        data = self.get_persons_for_table()
         if len(data) > 0:
-            self.main.widget.listFrame.fillTable(data)
+            self.main.tableWidget.fill_table(data)
         else:
-            self.main.widget.clearWidgets()
+            self.main.widget.clear_widgets()
+
+        QMessageBox.information(self.main, \
+            "Konvertierung beendet", \
+            "Alle Daten wurden konvertiert", \
+            buttons=QMessageBox.Ok
+        )
+    def on_exit(self):
+        self.conn.close()
+        return 
+    def open_project(self):
+        print("Data.openProject")
+
+        # Search for files in "data" subdirectory
+        items = []
+        files = os.listdir(self.configData["projectDir"])
+        for file in files:
+            if file.endswith(".db"):
+                items.append(file.removesuffix(".db"))
+
+        if len(items) == 0:
+            QMessageBox.information( 
+                self.main, \
+                "Öffnen nicht möglich", \
+                "Es wurde noch kein Projekt angelegt", \
+                buttons=QMessageBox.Ok
+            )
+            return
+
+        project, ok = QInputDialog.getItem(self.main, "Auswahl des Projektes", \
+            "Projekte", items, 0, False)
+
+        if not ok:
+            print("  Auswahl abgebrochen")
+            return
+
+        if not project:
+            print("Kein Projekt ausgewählt")
+            return
+
+        print("  Auswahl Projekt: " + project)
+        self.set_project(project)
+    def set_indi_attribute(self, persID, attribute, value):
+        # integer type #
+        if attribute in ("father", "mother"):
+            self.cursor.execute("UPDATE INDI SET " + attribute + " = "+ str(value) + " WHERE id = " + str(persID))
+        # boolean type #
+        elif attribute in ("finished"):
+            if value:
+                self.cursor.execute("UPDATE INDI SET " + attribute + " = 'X' WHERE id = " + str(persID))
+            else:
+                self.cursor.execute("UPDATE INDI SET " + attribute + " = '' WHERE id = " + str(persID))
+        # text type #
+        else:
+            self.cursor.execute("UPDATE INDI SET " + attribute + " = '" + value +"' WHERE id = " + str(persID))
+        self.conn.commit()
+    def set_project(self, project_name):
+        db_filename = self.configData["projectDir"] + "/" + project_name + ".db"
+        if not os.path.exists(db_filename):
+            self.create_db(project_name)
+        else:
+            self.conn = sqlite3.connect(db_filename) 
+            self.cursor = self.conn.cursor()
+            self.get_fam_columns()
+            self.get_indi_columns()
+    
+        self.main.setWindowTitle("Alva - " + project_name)  
+        self.configData["currProject"] = project_name
+
+        # In case, graphs are open, windows are closed
+        self.main.widget.closeGraphs()
+
+        # Fill PersonListWidget (Table) from columns, which are actually shown
+        data = self.get_persons_for_table()
+        if len(data) > 0:
+            self.main.fill_table(data)
+            self.main.resize_table_columns()
+            self.main.widget.set_person(data[0][0])    # first person, always first value is "id"
+        else:
+            self.main.clear_widgets()
+
+
     def exportData(self):
         # Conversion of json fle to ged file
         fileDlg = QFileDialog()
@@ -463,6 +941,8 @@ class Data():
         else:
             return True, dayStr + " " + monthArr[int(monthStr)-1] + " " + yearStr
     def _convertDataFormatXlsxToJson(self,fname):
+        return
+    
         df = pandas.read_excel(fname, sheet_name="Taufen Alle", dtype=str)
         first = True
         
@@ -777,6 +1257,7 @@ class Data():
 
         return
     def _convertDataFormatGedToJson(self, fname):
+        return
 
         # ----- Read Source File ----- #
         bytes = min(2048, os.path.getsize(fname))
@@ -797,8 +1278,8 @@ class Data():
         first = True
         firstPrint = True
         obj = {}
-        lastKey0 = ""
-        newKey = ""
+        lastkey0 = ""
+        newkey = ""
 
         for line in lines: # file could be opened
             cnt = cnt + 1
@@ -825,23 +1306,23 @@ class Data():
             # call recursion and write into file
             if level == 0 and not first:
                 obj = self._runRecursion(tab)
-                for newKey in obj.keys():
+                for newkey in obj.keys():
                     break
     
                 # braces, colons, new lines and indentation - magic ;o)
                 f = open(self.configData["currProjectFile"], 'a', encoding='utf8')
                 if not firstPrint:
-                    if lastKey0 != newKey:
-                        f.write("\n    ],\n    \"" + newKey + "\":\n    [\n")
+                    if lastkey0 != newkey:
+                        f.write("\n    ],\n    \"" + newkey + "\":\n    [\n")
                     else:
                         f.write(",\n")
                 else:
-                    f.write("{\n    \"" + newKey + "\":\n    [\n")
+                    f.write("{\n    \"" + newkey + "\":\n    [\n")
                     firstPrint = False
-                lastKey0 = newKey
+                lastkey0 = newkey
 
                 # write data from obj structure into file
-                json.dump(obj[newKey], f, indent=4, ensure_ascii=False)
+                json.dump(obj[newkey], f, indent=4, ensure_ascii=False)
                 f.close()
             elif level == 0:
                 first = False
@@ -853,39 +1334,20 @@ class Data():
         f = open(self.configData["currProjectFile"], 'a', encoding='utf8')
         
         # braces, colons, new lines and indentation - magic ;o)
-        for newKey in obj.keys(): break
-        if lastKey0 != newKey:
-            f.write("\n    ],\n    \"" + newKey + "\":\n    [\n")
+        for newkey in obj.keys(): break
+        if lastkey0 != newkey:
+            f.write("\n    ],\n    \"" + newkey + "\":\n    [\n")
         else:
             f.write(",\n")        
 
         # Write last Entity #
-        json.dump(obj[newKey], f, indent=4, ensure_ascii=False)
+        json.dump(obj[newkey], f, indent=4, ensure_ascii=False)
         
         # Closing Brackets
         f.write("\n]\n}")
         f.close()
-    def _convertDataFormatJsonToJson(self,file):
-        
-        # ----- Figure out codepage of file ----- #
-        bytes = min(32, os.path.getsize(file))
-        raw = open(file, 'rb').read(bytes)
-        result = chardet.detect(raw)
-        encoding = result['encoding']
-        # TODO: does not work always => dirty:
-        if encoding == "ascii": encoding = "utf-8"
-
-        # ----- Read Data ----- #
-        with open(file, encoding=encoding) as f:
-            jData = json.load(f)
-        f.close()
-        
-        # ----- Write Data to Target ----- #
-        f = open(self.configData["currProjectFile"], 'w', \
-                 encoding=self.configData["encoding"])
-        json.dump(jData, f, indent=4, ensure_ascii=False)        
     def _convertDataFormatCsvToJson(self,file):
-        # print("Data.readCsvFile")
+        return
 
         # :TODO: Ist erste Zeile mit Daten oder Spaltenüberschriften?
         # :TODO: Das ist die Reihenfolge der Felder ("Mapping"), die irgendwie anders 
@@ -1100,1423 +1562,3 @@ class Data():
         f = open(self.configData["currProjectFile"], 'w', encoding='utf8')
         json.dump(jData, f, indent=4, ensure_ascii=False)
         f.close()
-    def _runRecursion(self, tab):
-        obj = {}
-
-        while True:
-            if tab == []:
-                return obj
-            line = tab[0]
-            tab.pop(0) # remove first table entry
-
-            if len(tab) == 0:
-                nextLevel = 0
-            else:
-                nextLevel = tab[0]["level"] # level of next line
-            
-            if nextLevel <= line["level"]:
-                # check, if key: value is not appropriate anymore and we need key: [value1, value2, ...]
-                if line["key"] in obj.keys():
-                    if type(obj[line["key"]]) is list:
-                        obj[line["key"]].append(line["value"])
-                    else:
-                        obj[line["key"]] = [ obj[line["key"]], line["value"]]
-                elif line["key"] in ["FAMS","CHIL"]:         # FAMS - CHIL - ? => []
-                    if not line["key"] in obj:
-                        obj[line["key"]] = []
-                    obj[line["key"]].append(line["value"])
-                elif line["key"] == "MARR":
-                    if not "MARR" in obj:
-                        obj["MARR"] = {}
-                elif line["key"] == "NAME":
-                    if not "NAME" in obj:
-                        obj["NAME"] = {}
-                else:
-                    obj[line["key"]] = line["value"]
-
-                if nextLevel < line["level"]:
-                    break
-            else:
-                nextObj = self._runRecursion(tab)
-                if line["value"] != "":
-                    nextObj["id"] = line["value"]
-                obj[line["key"]] = nextObj
-
-        return obj
-
-    # -----SAVE + LOG ----- #
-    def _addToLog(self, id, field, value, mode):
-        f = open(self.logFilename, "a", encoding="utf-8")
-        f.write('"' + str(time.time()) + '","' + self.configData["currProject"] + '","INDI","' + \
-                str(id) + '","' + str(field) + '","' + str(value) + '","' + mode + '"\n')
-        f.close()
-    def _addToFamLog(self,id,field,value,mode):
-        f = open(self.logFilename, "a", encoding="utf-8")
-        f.write('"' + str(time.time()) + '","' + self.configData["currProject"] + '","FAM","' + \
-                str(id) + '","' + str(field) + '","' + str(value) + '","' + mode + '"\n')
-        f.close()
-    def _addToNoteLog(self,id,field,value,mode):
-        f = open(self.logFilename, "a", encoding="utf-8")
-        f.write('"' + str(time.time()) + '","' + self.configData["currProject"] + '","NOTE","' + \
-                str(id) + '","' + str(field) + '","' + str(value) + '","' + mode + '"\n')
-        f.close()
-    def _removeFromLog(self):
-        tmpContent = ""
-        first = True
-        if exists(self.logFilename):
-            f = open(self.logFilename, 'r', encoding="utf-8")
-            for line in f:
-                fields = line.split('","')
-                if len(fields) > 1:
-                    if fields[1] == self.configData["currProject"]:
-                        continue
-                if first:
-                    tmpContent = line
-                    first = False
-                else:
-                    tmpContent = "\n" + line
-            f.close()
-            
-        f = open(self.logFilename, 'w', encoding="utf-8")
-        f.write(tmpContent)
-        f.close()        
-    def save(self):
-        # Save current data #
-        self._saveJData()
-        
-        # Remove changed data from log file #
-        self._removeFromLog()
-    def _saveFromLog(self):
-        # Called at the beginning, when checking for not considered changes #
-        
-        # timestamp; INDI or FAM; id; field; value; mode - add (+) or remove (-)
-        # TODO: erst temporäre Kopie jData und darauf arbeiten und nur, wenn alles geklappt hat,
-        # zurück auf jData kopieren
-        # TODO: remove in mode berücksichtigen
-        # TODO: wenn ein Wert Teil einer Liste und nicht nur ein Wert ist, dann wird's doof
-        
-        if exists(self.logFilename):
-            f = open(self.logFilename, 'r', encoding="utf-8")
-            
-            error = False
-            for line in f:
-                if line == "": continue
-                if line[-1] == "\n": line = line[:-1]
-                if line == "": continue
-                if line[-1] == '"':  line = line[:-1]
-                if line == "": continue
-                    
-                fields = line.split('","')
-                if len(fields) >= 7:
-                    if fields[1] == self.configData["currProject"]:
-                        id   = fields[3]
-                        col  = fields[4]
-                        val  = fields[5]
-                        mode = fields[6] # add (+) or remove (-) => TODO
-
-                        if fields[2] == "INDI":
-
-                            # find person #
-                            idx = self.helperPersList.get(id,"")
-                            if idx == "" and col == "id":
-                                if "INDI" not in self.jData:
-                                    self.jData["INDI"] = []
-                                idx = len(self.helperPersList)
-                                self.jData["INDI"].append({"id": val})
-                                self.helperPersList[id] = idx
-                                continue
-                            
-                            # self.jData["INDI"], self.jData["INDI"][idx] = self._saveFromLogLine( \    
-                            self.jData["INDI"] = self._saveFromLogLine( \
-                                    fields[2], self.jData["INDI"], self.jData["INDI"][idx], \
-                                    self.helperPersList, col, val, mode 
-                                )
-                            
-                        elif fields[2] == "FAM":
-                            
-                            # find family #
-                            idx = self.helperFamList.get(id,"")
-                            if idx == "" and col == "id":
-                                if "FAM" not in self.jData:
-                                    self.jData["FAM"] = []
-                                idx = len(self.helperFamList)
-                                self.jData["FAM"].append({"id": val})
-                                self.helperFamList[id] = idx
-                                continue
-
-                            # self.jData["FAM"], self.jData["FAM"][idx] = self._saveFromLogLine( \
-                            self.jData["FAM"] = self._saveFromLogLine( \
-                                    fields[2], self.jData["FAM"], self.jData["FAM"][idx], \
-                                    self.helperPersList, col, val, mode 
-                                )
-                            
-                        elif fields[2] == "NOTE":
-                            
-                            # find note / comment / url #
-                            idx = self.helperNoteList.get(id,"")
-                            if idx == "" and col == "id":
-                                if "NOTE" not in self.jData:
-                                    self.jData["NOTE"] = []
-                                idx = len(self.helperNoteList)
-                                self.jData["NOTE"].append({"id": val})
-                                self.helperNoteList[id] = idx
-                                continue
-
-                            # self.jData["NOTE"], self.jData["NOTE"][idx] = self._saveFromLogLine( \
-                            self.jData["NOTE"] = self._saveFromLogLine( \
-                                    fields[2], self.jData["NOTE"], self.jData["NOTE"][idx], \
-                                    self.helperNoteList, col, val, mode 
-                                )                        
-                                                    
-            if not error:
-                self._removeFromLog()
-                self._saveJData()
-    def _saveFromLogLine(self, objType, jDataList, jData, idxList, col, val, mode):
-        
-        # Which column is affected? #
-        pos = col.find(">")
-        
-        if pos == -1:
-            if mode == "+":
-                # lists; add values if necessary #
-                if ( objType == "INDI" and col == "FAMS") or \
-                   ( objType == "FAM" and col == "CHIL"):
-                    jData[col] = [val]
-                else:
-                    jData[col] = val
-
-            elif mode == "-":
-                # special case whole INDI object #
-                if ( objType == "INDI" and col == "INDI") or \
-                   ( objType == "FAM" and col == "FAM") or \
-                   ( objType == "NOTE" and col == "NOTE"): 
-                    jDataList.remove(jData)
-                    i = 0
-                    idxList = {}
-                    for obj in jDataList: 
-                        idxList[i] = obj.get("id","")
-                        i = i + 1 
-                    return jDataList
-                        
-                # List Object #
-                elif isinstance(jData[col], list):
-                    if val != "":
-                        jData[col].remove(val)
-                        
-                # Simple Field #
-                else:
-                    jData.pop(col)
-                    
-        # 2-Level-field #
-        else:
-            field1 = col[0:pos]
-            field2 = col[pos+1:]
-            
-            if mode == "+":
-                if field1 not in jData:
-                    jData[field1] = {}    
-                jData[field1][field2] = val
-                
-            elif mode == "-":
-                jData[field1][field2].remove(val)                
-            
-        return jDataList #, jData
-    def _saveJData(self):
-        # Save current data #
-        filename = self.configData["projectDir"] + "/" + self.configData["currProject"] + ".json"
-        f = open(filename, "w", encoding="utf-8")
-        json.dump(self.jData, f, indent=4, ensure_ascii=False)
-        f.close()
-    def _updateFromLog(self,mode):
-        
-        # TODO: compare old and new data
-        found = False
-        if exists(self.logFilename):
-            f = open(self.logFilename, 'r', encoding="utf-8")
-            for line in f:
-                fields = line.split('","')
-                if len(fields) > 1:
-                    if fields[1] == self.configData["currProject"]:
-                        found = True
-                        break
-            f.close()
-
-        # Save current Data #
-        if found:
-            qm = QMessageBox()
-            qm.setWindowTitle("Speichern?")
-            qm.setText("Es gibt ungesicherte Änderungen. Änderungen speichern?")
-            qm.setStandardButtons(QMessageBox.Yes|QMessageBox.No|QMessageBox.Cancel)
-            btnYes    = qm.button(QMessageBox.Yes)
-            btnNo     = qm.button(QMessageBox.No)
-            btnCancel = qm.button(QMessageBox.Cancel)
-            btnYes.setText("Ja")
-            btnNo.setText("Nein")
-            btnCancel.setText("Abbruch")
-            qm.exec_()
-            if qm.clickedButton() == btnYes:
-                if mode == 1: # Save at exit
-                    self.save()
-                else:
-                    self._saveFromLog()
-            elif qm.clickedButton() == btnCancel:
-                return False
-
-        return True
-        
-    # ----- GETTER ----- #
-    def getBirthData(self, id):
-        # called from Graph.py #
-        return self._getEvent(id, "BIRT")
-    def getChildren(self, id):
-        # called from Graph.py #
-        children = []
-        ret, pers = self.getPerson(id)
-        if ret:
-            fams = pers.get("FAMS",[])
-            for fam in fams:
-                ret, famDic = self.getFamily(fam)
-                if ret:
-                    list = famDic.get("CHIL",[])
-                    for elem in list:
-                        children.append(elem)
-            return True, children
-        return False, []
-    def getComment(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            val = pers.get("comment","")
-            if val != "":
-                return True, val
-        return False, ""    
-    def getCommentFather(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            if "comment_father" in pers:
-                return True, pers["comment_father"]
-        return False, ""
-    def getCommentMother(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            if "comment_mother" in pers:
-                return True, pers["comment_mother"]
-        return False, ""
-    def getCompletionModel(self,idList,sexNot):
-        list = []
-        
-        for obj in self.jData["INDI"]:
-            if obj["id"] in idList: continue
-            if "SEX" in obj:
-                if obj["SEX"] == sexNot: continue
-            
-            ret, line = self.getPersSelStr(obj,"")
-            if ret: list.append(line)
-        
-        #return QStringListModel(list)
-        return list
-    def getDeathData(self, id):
-        # called from Graph.py #
-        return self._getEvent(id, "DEAT")
-    def _getEvent(self, id, evtStr):
-        # called from Graph.py #
-        obj = {}
-        ret, pers = self.getPerson(id)
-        if ret:
-            event = pers.get(evtStr)
-            if event != None and type(event) is dict:
-                obj["date"]  = event.get("DATE","")
-                obj["place"] = event.get("PLAC","")
-                return True, obj
-        return False, {}
-    def getFamily(self,fId):
-        # called from PersonWidget.py #
-        if fId in self.helperFamList:
-            return True, self.jData["FAM"][self.helperFamList[fId]]
-        return False, {}
-    def getFamilies(self,pId):
-        ret, pers = self.getPerson(pId)
-        if not ret: return ""
-        return pers.get("FAMS",[])
-    def getFamilyForPair(self, pId1, pId2):
-        # called from Graph.py #
-        ret, pers1 = self.getPerson(pId1)
-        if not ret: return ""
-        ret, pers2 = self.getPerson(pId2)
-        if not ret: return ""
-        
-        fams1 = pers1.get("FAMS",[])
-        fams2 = pers2.get("FAMS",[])
-        for fam in fams1:
-            if fam in fams2:
-                return fam
-        return ""
-    def getFatherId(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            if "FAMC" in pers:
-                ret, fam = self.getFamily(pers["FAMC"])
-                if ret:
-                    idF = fam.get("HUSB","")
-                    if idF != "":
-                        return True, idF
-        return False, ""
-    def get_finished(self, persID):
-        idx = self.helperPersList.get(persID,"")
-        if idx == "": 
-            return False
-
-        if "finished" in self.jData["INDI"][idx]:
-            return self.jData["INDI"][idx]["finished"]
-        else:
-            return False
-    def get_first_persID(self):
-        return self.jData["INDI"][0]["id"]
-    def getMarriageDate(self, id, idx):
-        ret, pers = self.getPerson(id)
-        if ret:
-            fams = pers.get("FAMS",[])
-            if len(fams) > idx:
-                fam = fams[idx]
-                ret, famObj = self.getFamily(fam)
-                if ret:
-                    marr = famObj.get("MARR")
-                    if marr != None:
-                        return marr.get("DATE","")
-        return ""
-    def getMarriageForFam(self, fId):
-        # called from Graph.py #
-        obj = {}
-        ret, fam = self.getFamily(fId)
-        if ret:
-            if "MARR" in fam:
-                obj["date"]  = fam["MARR"].get("DATE","")
-                obj["place"] = fam["MARR"].get("PLAC","")
-                return True, obj
-        return False, {}
-    def getMarriagePlace(self, id, idx):
-        ret, pers = self.getPerson(id)
-        if ret:
-            fams = pers.get("FAMS",[])
-            if len(fams) > idx:
-                fam = fams[idx]
-                ret, famObj = self.getFamily(fam)
-                if ret:
-                    marr = famObj.get("MARR")
-                    if marr != None:
-                        return marr.get("PLAC","")
-        return ""
-    def getMedia(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            val = pers.get("media","")
-            if val != "":
-                return True, val
-        return False, ""    
-    def getMotherId(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            if "FAMC" in pers:
-                ret, fam = self.getFamily(pers["FAMC"])
-                if ret:
-                    idM = fam.get("WIFE","")
-                    if idM != "":
-                        return True, idM
-        return False, ""
-    def getName(self, id):
-        # called from Graph.py #
-        name = {}
-        ret, pers = self.getPerson(id)
-        if ret:
-            if "NAME" in pers:
-                name["firstname"] = pers["NAME"].get("GIVN","")
-                name["surname"]   = pers["NAME"].get("SURN","")
-                return True, name
-        return False, {}
-    def getNextFamId(self):
-        cnt = 0
-        
-        while True:
-            cnt = cnt + 1
-            id = "@F" + str(cnt) + "@"
-            if id not in self.helperFamList:
-                break
-
-        return id
-    def _getNextNoteId(self):
-        cnt = 0
-        
-        while True:
-            cnt = cnt + 1
-            id = "@N" + str(cnt) + "@"
-            if id not in self.helperNoteList:
-                break
-
-        return id
-    def getNextPersonId(self):
-        cnt = 0
-        
-        while True:
-            cnt = cnt + 1
-            id = "@I" + str(cnt) + "@"
-            if id not in self.helperPersList:
-                break
-
-        return id
-    def _getNoteObj(self, id):
-        if id in self.helperNoteList:
-            return True, self.jData["NOTE"][self.helperNoteList[id]]
-        return False, {}    
-    def getOwnFamily(self, id):
-        objects = []
-        ret, pers = self.getPerson(id)
-        if ret:
-            fams = pers.get("FAMS",[])
-            for fam in fams:
-                obj = {}
-                ret, famDetails = self.getFamily(fam)
-                if not ret: continue
-                
-                # ID #
-                obj["id"] = fam
-                
-                # Marriage date and place #
-                marr = famDetails.get("MARR")
-                if marr != None:
-                    obj["date"]  = marr.get("DATE","")
-                    obj["place"] = marr.get("PLAC","")
-                    
-                # Partner #
-                husb = famDetails.get("HUSB","")
-                wife = famDetails.get("WIFE","")
-                if husb == id and wife != "":
-                    obj["partnerID"] = wife
-                elif wife == id and husb != "":
-                    obj["partnerID"] = husb
-                    
-                # Children #
-                chil = famDetails.get("CHIL")
-                if chil != None:
-                    obj["childrenID"] = chil
-                    
-                # Comments #
-                comm = famDetails.get("comment","")
-                commHe = famDetails.get("comment_father","")
-                commShe = famDetails.get("comment_mother","")
-                if commHe != "":
-                    if comm != "":
-                        comm += "\nEr: " + commHe
-                    else:
-                        comm = "Er: " + commHe
-                if commShe != "":
-                    if comm != "":
-                        comm += "\nSie: " + commShe
-                    else:
-                        comm = "Sie: " + commShe
-                if comm != "":
-                    obj["comment"] = comm
-                    
-                objects.append(obj)
-        return objects
-    def getParentsDict(self, id):
-        # called from PersonWidget + Graph.py #
-        obj = {}
-        ret, pers = self.getPerson(id)
-        if ret:
-            obj["comment_father"] = pers.get("comment_father","")
-            obj["comment_mother"] = pers.get("comment_mother","")
-            if "FAMC" in pers:
-                ret, fam = self.getFamily(pers["FAMC"])
-                if ret:
-                    obj["fatherId"] = fam.get("HUSB","")
-                    obj["motherId"] = fam.get("WIFE","")
-                    if obj["comment_father"] == "" and obj["fatherId"] != "":
-                        ret, nameDic = self.getName(obj["fatherId"])
-                        if ret:
-                            obj["comment_father"] = nameDic["firstname"] + " " + nameDic["surname"]
-                    if obj["comment_mother"] == "" and obj["motherId"] != "":
-                        ret, nameDic = self.getName(obj["motherId"])
-                        if ret:
-                            obj["comment_mother"] = nameDic["firstname"] + " " + nameDic["surname"]
-                    return True, obj
-        return False, {}    
-    def getParentsIDs(self, id):
-        # called from Graph.py #
-        ret, pers = self.getPerson(id)
-        if ret:
-            if "FAMC" in pers:
-                ret, fam = self.getFamily(pers["FAMC"])
-                if ret:
-                    return fam.get("HUSB",""), fam.get("WIFE","")
-        return "", ""
-    def getPartners(self, id):
-        # called from Graph.py #
-        partners = []
-        ret, pers = self.getPerson(id)
-        if ret:
-            fams = pers.get("FAMS",[])
-            for fam in fams:
-                ret, famDic = self.getFamily(fam)
-                if ret:
-                    if id == famDic.get("HUSB"):
-                        part = famDic.get("WIFE")
-                        if part != None:
-                            partners.append(part)
-                    elif id == famDic.get("WIFE"):
-                        part = famDic.get("HUSB")
-                        if part != None:
-                            partners.append(part)                            
-            if len(partners) > 0:
-                return True, partners
-        return False, []
-    def getPersonForDrawBox(self, id):
-        # Called from GraphAncestor
-        pers = {}
-        ret, pers["name"]  = self.getName(id)       # {"firstname":.., "surname":..}
-        pers["name"]["firstname"] = pers["name"].get("firstname","")
-        pers["name"]["surname"] = pers["name"].get("surname","")
-        ret, pers["birth"] = self.getBirthData(id)  # {"date":.., "place":..}
-        pers["birth"]["date"] = pers["birth"].get("date","")
-        pers["birth"]["place"] = pers["birth"].get("place","")
-        ret, pers["death"] = self.getDeathData(id)  # {"date":.., "place":..}
-        pers["death"]["date"] = pers["death"].get("date","")
-        pers["death"]["place"] = pers["death"].get("place","")
-        ret, pers["sex"]   = self.getSex(id)        # sex
-        return pers
-    def getPerson(self, id):
-        # called from PersonWidget.py #
-        if id in self.helperPersList:
-            return True, self.jData["INDI"][self.helperPersList[id]]
-        return False, {}
-    def get_person_for_table(self,id):
-        if self.helperPersList.get(id) == None:
-            return
-            
-        # List of key fields, which is used for the table #
-        fields = self.configData["personListFields"].keys()
-
-        for obj in self.jData["INDI"]:
-            if obj["id"] == id:
-                pers = obj
-                break
-        
-        line = []
-        for key in fields:
-            
-            if key in pers:
-                line.append(pers[key])
-                
-            elif key.find(">") > 0:
-                pos = key.find(">")
-                pre = key[0:pos]
-                post = key[pos+1:]
-                if pre in pers:
-                    if post in pers[pre]:
-                        line.append(pers[pre][post])
-                    else:
-                        line.append("")
-                else:
-                    line.append("")
-            else:
-                line.append("")
-        return line
-    def getPersonIdx(self,id):
-        # called from PersonWidget.py #
-        if id in self.helperPersList:
-            return True, self.helperPersList[id]
-        return False, {}
-    def getPersSelStr(self,obj,id):
-        # Parameter: filled either obj or id #
-        if obj == None and id != "":
-            if "INDI" not in self.jData: return False, ""
-            ret, obj = self.getPerson(id)
-            if not ret: return False, ""
-        elif obj == None:
-            return False, ""
-        
-        line = obj["id"] + " " + self.getPersStr(obj["id"]) 
-        return True, line
-    def getPersStr(self,id):
-        ret, obj = self.getPerson(id)
-        if not ret: return ""
-        
-        line = ""
-        
-        # Parameter: filled either obj or id #
-        if "NAME" in obj:
-            line = "<b>"
-            if "GIVN" in obj["NAME"]:
-                line = line + obj["NAME"]["GIVN"] + " "
-            if "SURN" in obj["NAME"]:
-                line = line + obj["NAME"]["SURN"] + " "
-            line += "</b>"
-        if "BIRT" in obj:
-            line = line + "/ geb. "
-            if "DATE" in obj["BIRT"]:
-                line = line + obj["BIRT"]["DATE"] + " "
-            if "PLAC" in obj["BIRT"]:
-                line = line + " in " + obj["BIRT"]["PLAC"] + " "
-        if "DEAT" in obj:
-            line = line + "/ gest. "
-            if "DATE" in obj["DEAT"]:
-                line = line + obj["DEAT"]["DATE"] + " "
-            if "PLAC" in obj["DEAT"]:
-                line = line + "in " + obj["DEAT"]["PLAC"] + " "
-                
-        return line
-    def getRelationComment(self, id, idx):
-        ret, pers = self.getPerson(id)
-        if ret:
-            fams = pers.get("FAMS",[])
-            if len(fams) > idx:
-                famID = fams[idx]
-                ret, fam = self.getFamily(famID)
-                if ret:
-                    return fam.get("comment","")
-        return ()
-    def getSex(self, id):
-        # called from Graph.py #
-        ret, pers = self.getPerson(id)
-        if ret:
-            sex = pers.get("SEX","").lower()
-            if sex != "":
-                return True, sex
-        return False, ""
-    def getUrl(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            val = pers.get("url","")
-            if val != "":
-                return True, val
-        return False, ""    
-    def getSource(self, id):
-        ret, pers = self.getPerson(id)
-        if ret:
-            val = pers.get("source","")
-            if val != "":
-                return True, val
-        return False, ""    
-           
-    # ----- Setter ----- #
-    def setBirthDate(self,id,value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "BIRT>DATE", value, "+")
-        
-        # json Data #
-        if not "BIRT" in self.jData["INDI"][idx]:
-            self.jData["INDI"][idx]["BIRT"] = {}
-        self.jData["INDI"][idx]["BIRT"]["DATE"] = value
-    def setBirthPlace(self,id,value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "BIRT>PLAC", value, "+")
-        
-        # json Data #
-        if not "BIRT" in self.jData["INDI"][idx]:
-            self.jData["INDI"][idx]["BIRT"] = {}
-        self.jData["INDI"][idx]["BIRT"]["PLAC"] = value
-    def setComment(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "comment", value, "+")
-        
-        # json Data #
-        self.jData["INDI"][idx]["comment"] = value               
-    def setCommentFather(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "comment_father", value, "+")
-        
-        # json Data #
-        self.jData["INDI"][idx]["comment_father"] = value        
-    def setCommentMother(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "comment_mother", value, "+")
-        
-        # json Data #
-        self.jData["INDI"][idx]["comment_mother"] = value        
-    def setDeathDate(self,id,value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "DEAT>DATE", value, "+")
-        
-        # json Data #
-        if not "DEAT" in self.jData["INDI"][idx]:
-            self.jData["INDI"][idx]["DEAT"] = {}
-        self.jData["INDI"][idx]["DEAT"]["DATE"] = value
-    def setDeathPlace(self,id,value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "DEAT>PLAC", value, "+")
-        
-        # json Data #
-        if not "DEAT" in self.jData["INDI"][idx]:
-            self.jData["INDI"][idx]["DEAT"] = {}
-        self.jData["INDI"][idx]["DEAT"]["PLAC"] = value
-    def setFamilyHusband(self, famID, fatherID):
-        ret, famObj = self.getFamily(famID)
-        if not ret: 
-            print("Familie " + str(famID) + " existiert nicht")
-            return
-        
-        ret, fatherObj = self.getPerson(fatherID)
-        if not ret: 
-            print("Vater " + str(fatherID) + " existiert nicht")
-            return
-                
-        husb = famObj.get("HUSB","")
-        if husb != fatherID:
-            famObj["HUSB"] = fatherID
-            self._addToFamLog(famID, "HUSB", fatherID, "+")       
-
-        if not "FAMS" in fatherObj:
-            fatherObj["FAMS"] = []
-            
-        if famID not in fatherObj["FAMS"]:
-            fatherObj["FAMS"].append(famID)
-            self._addToLog(fatherID, "FAMS", famID, "+")        
-    def setFamilyWife(self, famID, motherID):
-        ret, famObj = self.getFamily(famID)
-        if not ret: 
-            print("Familie " + str(famID) + " existiert nicht")
-            return
-        
-        ret, motherObj = self.getPerson(motherID)
-        if not ret: 
-            print("Mutter " + str(motherID) + " existiert nicht")
-            return
-                
-        wife = famObj.get("WIFE","")
-        if wife != motherID:
-            famObj["WIFE"] = motherID
-            self._addToFamLog(famID, "WIFE", motherID, "+")       
-
-        if not "FAMS" in motherObj:
-            motherObj["FAMS"] = []
-            
-        if famID not in motherObj["FAMS"]:
-            motherObj["FAMS"].append(famID)
-            self._addToLog(motherID, "FAMS", famID, "+")        
-    def setFamilyChild(self, famID, childID):
-        # Adds entries: INDI > FAMC and FAMS > CHILD #
-        ret, famObj = self.getFamily(famID)
-        if not ret: 
-            print("Familie " + str(famID) + " existiert nicht")
-            return
-        
-        ret, childObj = self.getPerson(childID)
-        if not ret: 
-            print("Kind " + str(childID) + " existiert nicht")
-            return
-
-        if not "CHIL" in famObj:
-            famObj["CHIL"] = []
-            
-        if childID not in famObj["CHIL"]:
-            famObj["CHIL"].append(childID)
-            self._addToFamLog(famID, "CHIL", childID, "+")       
-
-        childObj["FAMC"] = famID
-        self._addToLog(childID, "FAMC", famID, "+")        
-    def set_finished(self, persID, value):
-        idx = self.helperPersList.get(persID,"")
-        if idx == "": return
-
-        # Logging #
-        self._addToLog(id, "finished", value, "+")
-
-        self.jData["INDI"][idx]["finished"] = value
-    def setFirstname(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "NAME>GIVN", value, "+")
-        
-        # json Data #
-        if not "NAME" in self.jData["INDI"][idx]:
-            self.jData["INDI"][idx]["NAME"] = {}
-        self.jData["INDI"][idx]["NAME"]["GIVN"] = value
-    def setMarriageDate(self, id, idx, text):
-        ret, pers = self.getPerson(id)
-        if ret:
-            fams = pers.get("FAMS",[])
-            if len(fams) > idx or idx == 0:
-                if len(fams) == 0 and idx == 0:
-                    famID = self.addFamily()
-                    if pers.get("SEX") == None:
-                        self.setFamilyHusband(famID,id) # Default is male
-                    elif pers.get("SEX") == 'f':
-                        self.setFamilyWife(famID,id)
-                    else:
-                        self.setFamilyHusband(famID,id)
-                else:
-                    famID = fams[idx]
-    
-                ret, fam = self.getFamily(famID)
-                if ret:
-                    if fam.get("MARR") == None:
-                        fam["MARR"] = {}
-                    fam["MARR"]["DATE"] = text
-                    self._addToFamLog(famID,"MARR>DATE",text,"+")
-    def setMarriagePlace(self, id, idx, text):
-        ret, pers = self.getPerson(id)
-        if ret:
-            fams = pers.get("FAMS",[])
-            if len(fams) > idx or idx == 0:
-                if len(fams) == 0 and idx == 0:
-                    famID = self.addFamily()
-                    if pers.get("SEX") == None:
-                        self.setFamilyHusband(famID,id) # Default is male
-                    elif pers.get("SEX") == 'f':
-                        self.setFamilyWife(famID,id)
-                    else:
-                        self.setFamilyHusband(famID,id)
-                else:
-                    famID = fams[idx]
-                ret, fam = self.getFamily(famID)
-                if ret:
-                    if fam.get("MARR") == None:
-                        fam["MARR"] = {}
-                    fam["MARR"]["PLAC"] = text
-                    self._addToFamLog(famID,"MARR>PLAC",text,"+")
-    def setMedia(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "media", value, "+")
-        
-        # json Data #
-        self.jData["INDI"][idx]["media"] = value               
-    def setNote(self, persId, noteType, value):
-        ret, obj = self.getPerson(persId)
-        if not ret: return
-
-        if "NOTE" not in self.jData:
-            self.jData["NOTE"] = []
-        
-        # get NoteId #
-        noteId = obj.get(noteType,"")
-        if noteId == "":
-            noteId = self._getNextNoteId()
-            obj[noteType] = noteId
-            
-        # Set Value #        
-        ret, noteObj = self._getNoteObj(noteId)
-        if ret:
-            noteObj[noteType] = value
-        else: 
-            self.jData["NOTE"].append({"id":noteId, noteType:value})
-            self.helperNoteList[noteId] = len(self.helperNoteList)
-        
-        # Logging #
-        self._addToLog(persId, noteType, noteId, "+") 
-        self._addToNoteLog(noteId, noteType, value, "+")
-    def setSex(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return;
-        
-        # Logging #
-        self._addToLog(id, "SEX", value, "+")
-        
-        # json Data #
-        self.jData["INDI"][idx]["SEX"] = value
-    def setSurname(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "NAME>SURN", value, "+")
-        
-        # json Data #
-        if not "NAME" in self.jData["INDI"][idx]:
-            self.jData["INDI"][idx]["NAME"] = {}
-        self.jData["INDI"][idx]["NAME"]["SURN"] = value
-    def setUrl(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "url", value, "+")
-        
-        # json Data #
-        self.jData["INDI"][idx]["url"] = value               
-    def setRelationComment(self, id, idx, text):
-        ret, pers = self.getPerson(id)
-        if ret:
-            fams = pers.get("FAMS",[])
-            if len(fams) > idx:
-                famID = fams[idx]
-                ret, fam = self.getFamily(famID)
-                if ret:
-                    fam["comment"] = text
-                    self._addToFamLog(famID,"comment",text,"+")
-    def setSource(self, id, value):
-        idx = self.helperPersList.get(id,"")
-        if idx == "": return
-        
-        # Logging #
-        self._addToLog(id, "source", value, "+")
-        
-        # json Data #
-        self.jData["INDI"][idx]["source"] = value               
-                
-    # ----- Others ----- #
-    def addFamily(self):
-        famID = self.getNextFamId()
-
-        # Logging #
-        self._addToFamLog(famID, "id", famID, "+")
-        
-        if self.jData.get("FAM") == None:
-            self.jData["FAM"] = []
-            
-        # fill data and helper #
-        self.jData["FAM"].append({"id": famID})
-        self.helperFamList[famID] = len(self.jData["FAM"]) - 1 
-        
-        return famID
-    def add_person(self):
-        # Called from MainWidget.py #
-        id = self.getNextPersonId()  
-
-        # Logging #
-        self._addToLog(id,"id",id,"+")
-        
-        if len(self.jData.get("INDI",[])) == 0:
-            self.jData["INDI"] = []
-            
-        # fill data and helper #
-        self.jData["INDI"].append({"id":id})
-        self.helperPersList[id] = len(self.jData["INDI"]) - 1 
-
-        return id
-    def assignParent(self, childID, parentID, who):
-        # Called from PersonWidget.py #
-        # who = "WIFE" for mother and "HUSB" for father
-            
-        # CHECKS: does child exist? #
-        ret, childObj = self.getPerson(childID)
-        if not ret: return 
-        
-        # Remove Parent #
-        if parentID == "":
-            self.unassignParent(childID, who)
-            return
-            
-        # CHECKS: does parent exist?  #
-        ret, parentObj = self.getPerson(parentID)
-        if not ret: return 
-
-        famID = ""
-        otherParent = ""
-        if "FAMC" in childObj:
-            # Get other Partner and remember #
-            if who == "HUSB":
-                ret, otherParent = self.getMotherId(childID)
-            else:
-                ret, otherParent = self.getFatherId(childID)
-                
-            self.removeChildFromFamily(childID)
-            
-            if otherParent != "":
-                famID = self.getFamilyForPair(parentID, otherParent)
-            
-        if famID == "":
-            # is there a family with this parent and no partner?
-            found = False
-            if "FAMS" in parentObj:
-                for famID in parentObj["FAMS"]:
-                    ret, famObj = self.getFamily(famID)
-                    if ret:
-                        partnerWho = "HUSB" if who == "WIFE" else "WIFE"
-                        if famObj.get(partnerWho,"") == "":
-                            found = True
-                            break
-            if not found:
-                # Add new family #
-                famID = self.addFamily()
-
-        # Finally, write entries! #
-        if who == "HUSB": 
-            self.setFamilyWife(famID, otherParent)       
-            self.setFamilyHusband(famID, parentID)
-        else:             
-            self.setFamilyWife(famID, parentID)       
-            self.setFamilyHusband(famID, otherParent)
-        self.setFamilyChild(famID, childID)
-    def assignParents(self, childID, motherID, fatherID):
-        # CHECKS: Do all person objects exist? #
-        ret = self.getPerson(childID)
-        if not ret: 
-            print("Kind " + str(childID) + " existiert nicht")
-            return False
-        ret = self.getPerson(motherID)
-        if not ret: 
-            print("Mutter " + str(motherID) + " existiert nicht")
-            return False
-        ret = self.getPerson(fatherID)
-        if not ret: 
-            print("Vater " + str(fatherID) + " existiert nicht")
-            return False
-        
-        # Need to unassign the child from another family? #
-        self.removeChildFromFamily(childID)
-        
-        # is there a family with father and mother already? #
-        famID = self.getFamilyForPair(motherID, fatherID)
-        
-        # Create a new family if necessary #
-        if famID == "":
-            famID = self.addFamily()
-            
-        # TODO: wenn Mutter und Vater vertauscht sind, soll das ok sein, selbst nach Geschlecht schauen!
-        # Add mother (WIFE), father (HUSB), child (CHIL) to family #
-        # Add family to mother, father (INDI > FAMS) and child (INDI > FAMC) #
-        self.setFamilyHusband(famID, fatherID)
-        self.setFamilyWife(famID, motherID)
-        self.setFamilyChild(famID, childID)
-        
-        return True
-    def copy_person(self, fromID):
-        ret, data = self.getPerson(fromID)
-        if not ret:
-            return -1
-        
-        newID = self.getNextPersonId()        
-        data_new = {}
-
-        for key in data:
-            if key == "id":
-                data_new["id"] = newID
-                continue
-            elif key == "FAMS":
-                continue # new person cannot have the same children
-            elif key == "FAMC":
-                for fam in self.jData["FAM"]:
-                    if fam["id"] == data["FAMC"]:
-                        fam["CHIL"].append(newID) # add new person to the same family as child
-            
-            if isinstance(data[key],dict):
-                data_new[key] = {}
-                for inner in data[key]:
-                    data_new[key][inner] = data[key][inner]
-            else:
-                data_new[key] = data[key]
-
-        # fill data and helper #
-        self.jData["INDI"].append(data_new)
-        self.helperPersList[newID] = len(self.jData["INDI"]) - 1
-
-        return newID
-    def delete_person(self, persID):
-        ret, data = self.getPerson(persID)
-        if not ret:
-            return
-
-        if "FAMS" in data:                # person is WIFE or HUSB in this family
-            for fam in self.jData["FAM"]:
-                if fam["id"] in data["FAMS"]:
-                    if fam["WIFE"] == persID:
-                        fam.pop("WIFE")
-                    elif fam["HUSB"] == persID:
-                        fam.pop("HUSB")
-
-        if "FAMC" in data:                # person is CHIL in this family
-            for fam in self.jData["FAM"]:
-                if fam["id"] == data["FAMC"]:
-                    for i in range(len(fam["CHIL"])):
-                        if fam["CHIL"][i] == persID:
-                            fam["CHIL"].pop(i)
-                            break
-
-        cnt = -1
-        for pers in self.jData["INDI"]:  # Delete INDI 
-            cnt = cnt + 1
-            if pers["id"] == persID:
-                self.jData["INDI"].pop(cnt)
-                break
-
-        old_idx = self.helperPersList[persID] # Delete from helper
-        self.helperPersList.pop(persID)  
-        for id in self.helperPersList:
-            if self.helperPersList[id] > old_idx:
-                self.helperPersList[id] = self.helperPersList[id] - 1
-
-    def _deleteFamilyIfPossible(self, famID):                                         
-        ret, famObj = self.getFamily(famID)
-        if not ret: return
-        
-        # Delete whole family, if only WIFE and/or HUSB entries
-        pCnt = 0
-        # Do mother and father exist? #
-        fatherID = famObj.get("HUSB","")
-        if fatherID != "":
-            pCnt = pCnt + 1
-        motherID = famObj.get("WIFE","")
-        if motherID != "":
-            pCnt = pCnt + 1
-        pCnt = pCnt + 1 # for "id" of familiy
-        
-        if len(famObj) == pCnt:
-            self._removeFamily(famID)
-    def _fillHelperLists(self):
-        self.helperPersList = {}
-        self.helperNoteList = {}
-        
-        cnt = 0        
-        if "INDI" in self.jData:
-            for obj in self.jData["INDI"]:
-                self.helperPersList[obj.get("id")] = cnt
-                cnt = cnt + 1
-
-        self.fillHelperFamList()
-
-        cnt = 0        
-        if "NOTE" in self.jData:
-            for obj in self.jData["NOTE"]:
-                self.helperNoteList[obj.get("id")] = cnt
-                cnt = cnt + 1
-    def fillHelperFamList(self):
-        self.helperFamList  = {}
-
-        cnt = 0        
-        if "FAM" in self.jData:
-            for obj in self.jData["FAM"]:
-                self.helperFamList[obj.get("id")] = cnt
-                cnt = cnt + 1        
-    def onExit(self):
-        self.conn.close()
-        return self._updateFromLog(1)
-    def removeChildFromFamily(self, childID):
-        ret, childObj = self.getPerson(childID)
-        if not ret: return
-        
-        famID = childObj.get("FAMC")
-        if famID == None: return
-        
-        ret, famObj = self.getFamily(famID)
-        if not ret: return
-        
-        children = famObj.get("CHIL")
-        if children != None:
-            if childID in children:
-                children.remove(childID)
-                self._addToFamLog(famID, "CHIL", childID, "-")
-                
-            if len(children) == 0:
-                famObj.pop("CHIL","")
-                self._addToFamLog(famID, "CHIL", "", "-")
-                
-        self._deleteFamilyIfPossible(famID)
-    def _removeFamily(self, fam):
-        idx = self.helperFamList.get(fam,-1)
-        if idx < 0: return
-        
-        famObj = self.jData["FAM"][idx]
-        idMother = famObj.get("WIFE","")
-        idFather = famObj.get("HUSB","")
-        children = famObj.get("CHIL",[])
-        
-        # remove fam from jData["FAM"]
-        del self.jData["FAM"][idx]
-        self._addToFamLog(fam, "FAM", "", "-")
-        self.fillHelperFamList()
-        
-        # remove "FAMS" from jDATA["INDI"] for both parents
-        ret, pers = self.getPerson(idMother)
-        if ret:
-            famIDs = pers.get("FAMS")
-            if famIDs != None:
-                for obj in famIDs:
-                    if fam in famIDs:
-                        famIDs.remove(fam)
-                        self._addToLog(idMother, "FAMS", fam, "-")
-                        
-        ret, pers = self.getPerson(idFather)
-        if ret:
-            famIDs = pers.get("FAMS")
-            if famIDs != None:
-                for obj in famIDs:
-                    if fam in famIDs:
-                        famIDs.remove(fam)
-                        self._addToLog(idFather, "FAMS", fam, "-")
-        
-        # remove "FAMC" from jDATA["INDI"] 
-        for idChild in children:
-            ret, pers = self.getPerson(idChild)
-            if ret:
-                famChild = pers.get("FAMC")
-                if famChild != None:
-                    pers.pop("FAMC")
-                    self._addToLog(idChild, "FAMC", "", "-")
-    def _selectPersonList(self):
-        # Source must be filled already: self.jData #
-        if "INDI" not in self.jData:
-            return []
-        
-        # Initialize
-        tabData = []
-        
-        # List of key fields, which is used for the table #
-        fields = self.configData["personListFields"].keys()
-        
-        for pers in self.jData["INDI"]:
-            line = []
-            for key in fields:
-                if key in pers:
-                    line.append(pers[key])
-                elif key.find(">") > 0:
-                    pos = key.find(">")
-                    pre = key[0:pos]
-                    post = key[pos+1:]
-                    if pre in pers:
-                        if post in pers[pre]:
-                            line.append(pers[pre][post])
-                        else:
-                            line.append("")
-                    else:
-                        line.append("")
-                else:
-                    line.append("")
-            tabData.append(line)
-        return tabData
-    def unassignParent(self, childID, who):
-        fatherID, motherID = self.getParentsIDs(childID)
-        self.removeChildFromFamily(childID)
-                
-        # Assign person to the other part of parents
-        if fatherID != "" and motherID != "":
-            if who == "HUSB":
-                self.assignParent(childID, motherID, "WIFE")
-            elif who == "WIFE":
-                self.assignParent(childID, fatherID, "HUSB")
-                
-        return True
-    def updatePersValue(self,objectType,id,field,value):
-        # Called from PersonListWidget.py #
-        
-        # Logging #
-        self._addToLog(id, field, value, "+")
-        
-        # Update in internal json Structure #
-        if objectType in self.jData:
-            ret, idx = self.getPersonIdx(id)
-            if ret:
-                pos = field.find(">")
-                if pos == -1:
-                    self.jData["INDI"][idx][field] == value
-                else:
-                    field1 = field[0:pos]
-                    field2 = field[pos+1:]
-                    if field1 not in self.jData["INDI"][idx]:
-                        self.jData["INDI"][idx][field1] = {}
-                    self.jData["INDI"][idx][field1][field2] = value
-    def removeFamilyPartner(self, fid, id): # id is the remaining partner
-        ret, famObj = self.getFamily(fid)
-        if not ret: return
-
-        pers = famObj.get("HUSB","")
-        if pers != id:
-            famObj.pop("HUSB")
-            self._addToFamLog(fid, "HUSB", pers, "-") 
-            
-        pers = famObj.get("WIFE","")
-        if pers != id:
-            famObj.pop("WIFE")
-            self._addToFamLog(fid, "WIFE", pers, "-") 
-        
-        self._deleteFamilyIfPossible(fid)
-    def createTreeAncestors(self, id): # Vorfahren
-        idList = {id: {"idFather": "", "idMother": "", "x": 0, "y": 0, "done": False}}
-        lineList = []
-        cnt = 0
-        minYear = 9999
-        maxYear = -9999
-
-        # Get all involved people
-        while True:
-            newIdList = {}
-            for pid in idList:
-                obj = idList[pid]
-                if obj["done"]: continue
-
-                idFather, idMother = self.getParentsIDs(pid)
-                if idFather != "":
-                    obj["idFather"] = idFather
-                    newIdList[idFather] = {"idFather": "", "idMother": "", "idChild": pid, "x": 0, "y": 0, "done": False}
-                    lineList.append([pid,idFather])
-                if idMother != "":
-                    obj["idMother"] = idMother
-                    newIdList[idMother] = {"idFather": "", "idMother": "", "idChild": pid, "x": 0, "y": 0, "done": False}
-                    lineList.append([pid,idMother])
-
-                obj["done"] = True
-
-            # Append new entries to original list
-            for pid in newIdList:
-                obj = newIdList[pid]
-                idList[pid] = obj
-
-            # Step out criteria from loop
-            if len(newIdList) == 0: break
-
-        # Add birth year
-        for pid in idList:
-            obj = idList[pid]
-            year = ""
-            ret, birth = self.getBirthData(pid)
-            if ret:
-                year = birth.get("date","")
-
-            if year != "":
-                try:
-                    birth = parse(year, fuzzy=False)
-                    year = birth.year
-                    obj["year"] = year
-                    if minYear > year: minYear = year
-                    if maxYear < year: maxYear = year
-                    print(pid + " " + str(year) + " - " + self.getPersStr(pid))
-                except ValueError:
-                    year = 0
-
-        found = True
-        while found:
-            for pid in idList:
-                found = False
-                obj = idList[pid]
-                if obj.get("year", 0) == 0:
-                # Find "Line" with pid as second value => assume, mother/father is 20 years older than child
-                    for line in lineList:
-                        if line[1] == pid:
-                            childId = line[0]
-                            objC = idList[childId]
-                            year = objC.get("year", 0) - 20
-                            if year > 0: 
-                                obj["year"] = year
-                                if minYear > year: minYear = year
-                                if maxYear < year: maxYear = year
-                                print(pid + " " + str(year) + " - " + self.getPersStr(pid))
-                                found = True
-                            break
-                        
-
-        print("Jahre: " + str(minYear) + " - " + str(maxYear))
-        maxYear += 40 # Damit die jüngste Person aufs "Papier" passt
-        return idList, lineList, minYear, maxYear

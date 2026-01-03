@@ -3,15 +3,20 @@
     "personListFields": {
         "id": "ID",
         "finished": "Fertig",
-        "NAME>SURN": "Nachname",
-        "NAME>GIVN": "Vorname",
-        "BIRT>DATE": "Geb. Datum",
-        "BIRT>PLAC": "Geb. Ort",
-        "DEAT>DATE": "Tod Datum",
-        "DEAT>PLAC": "Tod Ort"
+        "SURN": "Nachname",
+        "birthname": "geb.",
+        "GIVN": "Vorname",
+        "BIRT_DATE": "Geb. Datum",
+        "BIRT_PLAC": "Geb. Ort",
+        "DEAT_DATE": "Tod Datum",
+        "DEAT_PLAC": "Tod Ort",
+        "father": "VaterID",
+        "mother": "MutterID",
+        "SEX": "Geschlecht",
+        "no_child": "Kinderlos",
+        "guess_birth": "Geburtsjahr geschätzt",
+        "guess_death": "Todesjahr geschätzt"
     },
     "projectDir": "data",
-    "persLog": "logs/pers.log",
-    "currProject": "Griechische Götter",
-    "currProjectFile": "data/Griechische Götter.json"
+    "currProject": "Manuela"
 }

@@ -1,52 +1,43 @@
 # Doku: https://alva.ur-ahn.de/
 import sys
+from datetime import datetime
 from PyQt5.QtWidgets            import QApplication, QMainWindow, QStyleFactory, QMessageBox
-from classes.GraphList          import GraphList
-from classes.MainWidget         import MainWidget
-from classes.MainWindowMenu     import MainWindowMenu
-from classes.MainWindowToolbars import MainWindowToolbars
+from classes.Graph              import GraphList
+from classes.MainWidget         import MainWidget, MainWindowMenu, MainWindowToolbars
 from classes.Data               import Data
 from classes.Config             import Config
 
-# - Umbau @Ixxx@ + @Fxxx@ => numerische ID xxx
-# - Umbau Verwaltung per DB statt json Dumps
-# - PersonWidget muss einen Scrollbalken bekommen
-# - Speichern: das Feld, auf dem gerade der Cursor steht, muss mit berücksichtigt werden
-# WEITER MIT PersonWidget >> _onPartnerClick()
-# - Eltern-Kind-Strich von Kind zu Partner und nicht zu ohnehin feststehendem Elternteil
-# - vielleicht bekommt man die Auswichtung etwas besser hin?
-# - Icon zum Neuanlegen einer Person
-# - Partner haben keine Bezeichnung ihrer Beziehung zur zentralen Person
-# - Großeletern doppelt wegen Partnern
-# - hover mit mehr Details?
-# - Person- und Partnerdetails aus der Datenbank bereits beim setPerson()
-# - Buttons für "Abdocken", "Andocken", "Refresh"(?), Drucken
-# - Großeletern-Strich in die Mitte
-# - Eltern-Strich in die Mitte (betrifft nicht Onkel und Tanten!)
-# - Eltern als ein Elternteil plus Partner ist nicht so doll
-# - Beschriftung Verwandtschaftsname nicht fett
-# - Vater als letztes und Mutter als erstes Geschwisterkind sortieren, dann beide ohne Lücke 
-#   zusammenfügen (was passiert mit anderen Partnern?)
-# - Großelternpaare lückenlos zusammenfügen (was passiert mit anderen Partnern?)
-# - Stief- und Halbgeschwister?
-# - Update-Button
-# - Copy&Paste in Personentabelle nicht möglich
-# - Neuer Ehepartner => es ist derzeit nicht klar, zu welcher Familie er gehört (_onPartnerClick)
+# ALLGEMEIN
 # - Block für weitere Familie erstellen - nötig(?)
-# - Kommentar zur Person: wenn man schreibt, sind Schrift, Schriftart, Größe und Hintergrund nicht 
-#   einheitlich mit dem Rest
 # - Löschen einer Ehe (fehlt)
-# - Neues Flag, dass zu der Person noch nicht alle INfos erfasst sind (Eltern <=> Ehen <=> Kinder)
-# TODO: Menübar einfärben (?nötig?)
-# TODO: Icons im Menü vor dem Text
-# TODO: Shortcuts
-# TODO: alle Submenüs
-# TODO: alle Aktionen
-# TODO: self.setWindowIcon(QtGui.QIcon("icon.png"))
-# TODO: alle Fraben in allen Klassen auslagern in Konfiguration
+# - Menübar einfärben(?) oder Schrift fett / größer(?)
+# - Shortcuts
+# - alle Farben und Texte (=> Konstanten) in allen Klassen auslagern in Konfiguration
 # - ID kann auch in anderer als erster Spalte stehen => wichtig in Tabelle
+# - combine projects (neu)
+# - Datum per 3 Feldern eingeben dd-mm-yyyy, wenn unbekannt, dann bleibt die Komponente 0
+# - Datum geschätzt als Checkbox
+# - Menüpunkt mit Checks
+# - Menüpunkt mit Statistik
+# - PersonWidget muss einen Scrollbalken bekommen
+# - Status anklemmen
+# - Personen mit Info, zu welchen Stammbäumen sie ghören, also ob sie mit den anderen Personen 
+#   irgendwie verbunden sind, um zu sehen, wer "Karteileichen" sind
+# - In Personendetails: Cosima fehlt auf erstem Tab bei mir
+# - Personenstring überall einheitlich
+# GRAPH (Ancestors)
+# - Skalierung nicht lang genug
+# GRAPH (Nachfahren)
+# - klickbar
 
 class Main(QMainWindow):
+    # Constraints:
+    # - data stored in SQlite database (file-based)
+    # - Person IDs are integer (not e.g. @I29@)
+    # - No camel case, but separated words
+    # - Keep it simple
+    # - Genealogische Zeichen aus: https://de.wikipedia.org/wiki/Genealogisches_Zeichen
+    # - Icons from: https://commons.wikimedia.org/wiki/Crystal_Clear
 
     def __init__(self, parent=None):
         super(Main, self).__init__(parent)
@@ -55,43 +46,51 @@ class Main(QMainWindow):
         self.conf         = Config(self)
         self.data         = Data(self, self.conf.jData)
         self.widget       = MainWidget(self, self.data)
-        self.setCentralWidget(self.widget)
-        self.graphList    = GraphList(self, self.data)
-        self.widget.setGraphList(self.graphList)
-        self.tableWidget  = self.widget.listFrame
+        self.graphList    = GraphList(self)
+        self.tableWidget  = self.widget.tableW
         self.detailWidget = self.widget.persFrame
+        self.menu         = MainWindowMenu(self) # used in MainWindowToolbars
+        self.toolbars     = MainWindowToolbars(self)
 
-        # ----- Menu and all Actions ------------------------------------------------------------ #
-        self.menu = MainWindowMenu(self)
+        self.setCentralWidget(self.widget)
+        self.widget.setGraphList(self.graphList)
         self.setMenuBar(self.menu)
-        self.toolbars = MainWindowToolbars(self)
-
-        # Alva: (A)hnen(l)isten (v)on (a)llen
-        self.setWindowTitle("Alva")  
+        self.setWindowTitle("Alva")  # Alva: (A)hnen(l)isten (v)on (a)llen
         self.setGeometry(self.widget.left, self.widget.top, self.widget.width, self.widget.height)
 
         if self.conf.get_current_project() != "":
-            self.data.setProject(self.conf.jData["currProject"])
+            self.data.set_project(self.conf.jData["currProject"])
 
         QApplication.setCursorFlashTime(0)  # 0 = no cursor blinking in all widgets
 
     # ------------------------------------------------------------------------------------------- #
     # ----- A C T I O N S ----------------------------------------------------------------------- #
     # ------------------------------------------------------------------------------------------- #
-    def onNewProject(self):
-        print( "onNewProject" )
-        self.data.newProject()
-    def onOpenProject(self):
-        print( "onOpenProject" )
-        self.data.openProject()
-    def onCombining(self):
-        print( "onCombining" )
-    def on_copy_person(self):
+
+    def clear_widgets(self):
+        self.widget.clear_widgets()
+    def copy_person(self):
         currID = self.detailWidget.get_ID()              # Current line in table is selected line => get ID
         newID  = self.data.copy_person(currID)           # Get new ID 
-        self.detailWidget.setPerson(newID)               # Show new line in Details
+        self.detailWidget.set_person(newID)              # Show new line in Details
         self.tableWidget.add_person(newID)               # Show and select new line in Table
-    def on_delete_person(self):
+    def convert_date_to_hr(self, date_str):
+        try:
+            obj = datetime.strptime(date_str, "%Y-%m-%d")
+            if obj:
+                return obj.strftime("%d.%m.%Y")
+        except:
+            pass
+        return date_str
+    def create_person(self):
+        persID = self.data.create_person()
+        self.tableWidget.add_person(persID)  # Add Person in PersonList 
+        self.widget.set_person(persID)       # Set the new (empty) person having Focus 
+    def create_project(self):
+        print( "create_project" )
+        self.data.create_project()
+        self.set_person(-1)
+    def delete_person(self):
         currID = self.detailWidget.get_ID()              # Current line in table is selected line => get ID
         qm = QMessageBox()                               # Dialog to ask, if really delete
         qm.setWindowTitle("Löschen")
@@ -104,86 +103,95 @@ class Main(QMainWindow):
         qm.exec_()
         if qm.clickedButton() == btnYes:
             self.tableWidget.delete_person(currID)       # delete line in Table
-            self.data.delete_person(currID)              # delete data in json
-            newID = self.data.get_first_persID()         # show first person
-            self.detailWidget.setPerson(newID)           # show first person in Details
+            self.data.delete_person(currID)              # delete data in database
+            newID = self.tableWidget.get_selected_pers()
+            self.detailWidget.set_person(newID)          # show first person in Details
             self.tableWidget.select_persID(newID)        # select first person in Table
-    def on_new_person(self):
-        persID = self.data.add_person()
-        self.tableWidget.add_person(persID)  # Add Person in PersonList 
-        self.widget.setPerson(persID)        # Set the new (empty) person having Focus 
-    def onDelete(self):
-        pass
-    def onSave(self):
-        print( "onSave" )
-        self.data.save()
-    def onSaveAs(self):
-        print( "onSaveAs" )
-    def onImport(self):
-        print( "onImport" )
-        self.data.importData()
-    def onExport(self):
-        print( "onExport" )
+    def export(self):
+        print( "export" )  # called from MainWindowMenu
         self.data.exportData()
-    def onExit(self):
-        print( "onExit" )
-        ret = self.data.onExit()
-        if ret:
-            self.conf.onExit()
-    def onPrint(self):
-        print( "onPrint" )
-    def onFileNav(self):
-        print( "onFileNav" )
-        self.toolbars.switchDetailToolbar("Nav")
-    def onProcessNav(self):
-        print( "onProcessNav" )
-        self.toolbars.switchDetailToolbar("Process")
-    def onViewNav(self):
-        print( "onViewNav" )
-        self.toolbars.switchDetailToolbar("View")
-    def onOutNav(self):
-        print( "onOutNav" )
-        self.toolbars.switchDetailToolbar("Out")        
-    def onToolsNav(self):
-        print( "onToolsNav" )
-        self.toolbars.switchDetailToolbar("Tools")        
-    def onHelperNav(self):
-        print( "onHelperNav" )
-        self.toolbars.switchDetailToolbar("Helper")
-
-    # ---------------------- #
-    # ---- G E T T E R ----- #
-    # ---------------------- #
+    def fill_table(self, data):
+        self.tableWidget.fill_table(data)
+    def get_birth_full(self, persID):
+        if persID in (0, -1): 
+            return ""
+        person = self.data.get_person(persID) # as dictionary from INDI
+        dat = person["BIRT_DATE"]
+        plc = person["BIRT_PLAC"]
+        return self.get_date_line(dat, plc, "*")
     def get_conf_table_fields(self):
         return self.conf.get_conf_table_fields()
-    def get_finished(self, persID):
-        return self.data.get_finished(persID)
+    def get_date_line(self, date, place, sign):
+        dat = self.convert_date_to_hr(date)
+        if dat == "" and place == "":
+            return ""
+        if dat != "":
+            dat = sign + " am " + dat
+        if place != "":
+            place = "in " + place        
+        return (dat + " " + place).strip()
+    def get_death_full(self, persID):
+        if persID in (0, -1): 
+            return ""
+        person = self.data.get_person(persID) # as dictionary from INDI
+        dat = person["DEAT_DATE"]
+        plc = person["DEAT_PLAC"]
+        return self.get_date_line(dat, plc, "†")
+    def get_children(self, persID):
+        return self.data.get_children(persID)
+    def get_father_id(self, persID):
+        return self.data.get_indi_attribute(persID, "father")
+    def get_firstname(self, persID):
+        return self.data.get_indi_attribute(persID, "GIVN")
+    def get_name_full(self, persID):
+        if persID in (0, -1): return ""
+        person = self.data.get_person(persID) # as dictionary from INDI
+        return person["GIVN"] + " " + person["SURN"]
+    def get_marriage_for_pair(self, pers1, pers2):
+        marr = self.data.get_marriage(pers1, pers2)
+        if len(marr) > 0:
+            return "⚭ am " + marr[0]["MARR_DATE"] + " in " + marr[0]["MARR_PLAC"]
+        return ""
+    def get_mother_id(self, persID):
+        return self.data.get_indi_attribute(persID, "mother")
+    def get_partners_blood(self, persID):
+        return self.data.get_partners_blood(persID)
     def get_table_col_number(self, fieldname):
         return self.conf.get_table_col_number(fieldname)
     def get_person_for_table(self, persID):
         return self.data.get_person_for_table(persID)
     def get_sex(self, persID):
-        return self.data.getSex(persID)
-
-    # ---------------------- #
-    # ---- S E T T E R ----- #
-    # ---------------------- #
+        return self.data.get_indi_attribute(persID, "SEX")
+    def get_surname(self, persID):
+        return self.data.get_indi_attribute(persID, "SURN")
+    def import_action(self):
+        print( "import_action" )  # called from MainWindowMenu
+        self.data.import_data()
+    def is_field_in_table(self, fieldname):
+        return self.conf.is_field_in_table(fieldname)
+    def on_exit(self):
+        print( "onExit" )  # called from MainWindowMenu
+        self.data.on_exit()
+        self.conf.on_exit()
+    def open_graph_ancestors(self):
+        anc_list, line_list, min_year, max_year = self.data.get_ancestors(self.detailWidget.ID)
+        graph = self.graphList.add_graph_ancestor(anc_list, line_list, min_year, max_year)
+        graph.show()
+    def open_graph_descendants(self):
+        anc_list, line_list, min_year, max_year = self.data.get_descendants(self.detailWidget.ID)
+        graph = self.graphList.add_graph_descendant(anc_list, line_list, min_year, max_year)
+        graph.show()    
+    def open_project(self):
+        print( "onOpenProject" )# called from MainWindowMenu
+        self.data.open_project()    
+    def resize_table_columns(self):
+        self.tableWidget.resize_table_columns()
     def set_finished(self, persID, value):
         self.data.set_finished(persID, value)
     def set_person(self, persID, with_list = True):
-        self.widget.setPerson(persID, with_list)
-
-    # ---------------------- #
-    # ---- O T H E R S ----- #
-    # ---------------------- #
-    def copy_person(self, persID):
-        self.data.copy_person(persID)
-    def fill_table(self, data):
-        self.tableWidget.fill_table(data)
-    def is_field_in_table(self, fieldname):
-        return self.conf.is_field_in_table(fieldname)
-    def resize_table_columns(self):
-        self.tableWidget.resize_table_columns()
+        self.widget.set_person(persID, with_list)
+    def statistik_person(self):
+        pass
     def update_table_row(self, persID):
         self.tableWidget.update_table_row(persID)
 
@@ -207,3 +215,7 @@ if __name__ == "__main__":
 # - Ctrl + S >> Speichern
 # - ID numerisch und zentriert
 # - In Tabelle Farben für Männlich / weiblich in ID-Zelle
+# - Umbau @Ixxx@ + @Fxxx@ => numerische ID xxx
+# - Aggregierte Klassen in einer Datei (Graph.py, MainWidget.py)
+# - Umbau Verwaltung per DB statt json Dumps
+# - Neues Flag, dass zu der Person alle Infos erfasst sind (Eltern <=> Ehen <=> Kinder) (fertig)
