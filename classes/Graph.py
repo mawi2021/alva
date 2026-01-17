@@ -1,11 +1,13 @@
-from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea
-from PyQt5.QtGui     import QPainter, QBrush, QColor, QFont, QPixmap, QPalette
-from PyQt5.QtCore    import Qt
-from PyQt5.QtGui     import *
-from PyQt5.QtCore    import *
-from PyQt5.QtWidgets import *
+from PyQt5.QtWidgets          import QMainWindow, QLabel, QScrollArea
+from PyQt5.QtGui              import QPainter, QBrush, QColor, QFont, QPixmap, QPalette
+from PyQt5.QtCore             import Qt, QUrl
+from PyQt5.QtGui              import *
+from PyQt5.QtCore             import *
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWidgets          import *
+import os
 
-# classes GraphAncestor & GraphDescendant & GraphList
+# classes GraphAncestor & GraphDescendant & GraphDescendantHtml & GraphList
 
 class GraphAncestor(QMainWindow):
     # ----- Read GUI Content from UI File ---------------------------- *
@@ -198,7 +200,7 @@ class GraphDescendant(QMainWindow):
         
         # each record includes: x, y, sex, mother (id), father (id), partners (list)
         # each partner record includes: fam_id, id, sex
-        self.ids    = idList
+        self.ids        = idList
         self.lineList   = lineList
         self.minYear    = minYear
         self.maxYear    = maxYear
@@ -357,17 +359,155 @@ class GraphDescendant(QMainWindow):
         
         self.yMax = 2 * self.boxOffset + (self.maxYear - self.minYear) * self.dotPerYear + self.boxHeight
     def clearGraph(self):
-        # self.person["Grandparents"]   = []
-        # self.person["Parents"]        = []  # List of pids
-        # self.person["Children"]       = []  # List of pids
-        # self.person["Siblings"]       = []  # List of pids
-        # self.person["Partners"]       = []  # List of pids
-        # self.person["Grandchildren"]  = []
-        # self.person["Parentsiblings"] = []
-
-        # self.label.pixmap().fill(self.backgroundColor)
-        # self.update();
         self.main.graphList.update()
+
+
+class GraphDescendantHtml(QMainWindow):
+    # ----- Read GUI Content from UI File ---------------------------- *
+    def __init__(self, main, idList, lineList, minYear, maxYear):
+        super().__init__()
+  
+        self.main       = main
+
+        self.ids        = idList
+        self.lines      = lineList
+        self.minYear    = minYear
+        self.maxYear    = maxYear
+        
+        self.lineHeight     = 14
+        self.margin         = 10
+        self.minHeight      = 50  # should be the same as in css file
+        self.dotPerYear     = 6
+        self.boxWidth       = 150
+        self.boxOffset      = 50
+        self.windowOffset   = 100
+        self.shortBoxHeight = int(4 * self.lineHeight + 0.5 * self.margin)
+        self.boxHeight      = int(9 * self.lineHeight + 0.5 * self.margin)
+        self.boxHeight      = int(9 * self.lineHeight + 0.5 * self.margin)
+        self.boxOffset      = 50
+        self.windowOffset   = 100
+        self.rechtwinklig   = True   # waagerechte und senkrechte Verbinder
+
+        self.calc_coords()
+        self.window = QWebEngineView()
+        html = self.get_html()
+        base_dir = os.path.abspath(os.path.dirname(__file__) + os.sep + "..")
+        base_url = QUrl.fromLocalFile(base_dir + os.sep)
+        self.window.setHtml(html, base_url)        
+        self.setCentralWidget(self.window)
+        self.resize(1000, 1000)
+    def calc_coords(self):
+        # Simple approach; optimization is a later step #
+        self.xMax = self.windowOffset
+        for persID in self.ids:
+            box = self.ids[persID]
+            # y-Coordinate - start with upper left corner
+            box["y"] = self.boxOffset + (box["year"] - self.minYear) * self.dotPerYear
+
+            # x-Coordinate - start with upper left corner
+            if box["children"] == []:
+                box["x"] = self.xMax
+                self.xMax = self.xMax + self.boxWidth + self.boxOffset
+            else:
+                box["x"] = 0
+        
+        # adjust child in the middle below parents
+        found = True
+        while found:
+            found = False
+            for persID in self.ids:
+                box = self.ids[persID]
+                if box["x"] > 0:
+                    continue
+
+                if len(box["children"]) == 0:
+                    continue  # Kann das vorkommen?
+
+                child_left = box["children"][0]
+                if self.ids[child_left]["x"] == 0:
+                    continue
+
+                child_right = box["children"][len(box["children"])-1]  # can be the same as child_left
+                if self.ids[child_right]["x"] == 0:
+                    continue            
+
+                # adjust
+                box["x"] = int(( self.ids[child_left]["x"] + self.ids[child_right]["x"] ) / 2)
+                found = True
+        
+        self.yMax = 2 * self.boxOffset + (self.maxYear - self.minYear) * self.dotPerYear + self.boxHeight
+    def get_html(self):
+        ret = "<!DOCTYPE html>\n" + \
+              "<html>\n" + \
+              "<head><link rel='stylesheet' href='styles/app.css'></head>\n" + \
+              "<body>\n" + \
+              "  <div class='layer' style='width:'" + str(self.xMax) + "px;height:" + str(self.yMax) + "px;+'>\n"
+
+        # svg begin
+        ret = ret + '<svg xmlns="http://www.w3.org/2000/svg"' + \
+                    '  width="'  + str(self.xMax) + \
+                    '" height="' + str(self.yMax) + '"  style="position:absolute;top:0;left:0;border:1px solid #ccc;">\n'    
+
+        # scale with years (<line>)
+        ret = ret + '  <line x1="0" y1="0" x2="0" y2="' + str(round(self.yMax)) + '" stroke="black" stroke-width="1" />\n'
+        for i in range(self.minYear, self.maxYear+21):
+            if i % 10 == 0:
+                y = int(round(i - self.minYear) * self.dotPerYear + self.boxOffset) 
+                ret = ret + \
+                    '  <line x1="0" y1="' + str(y) + '" x2="10" y2="' + str(y) + '" stroke="black" stroke-width="1" />\n' + \
+                    '  <text x="15" y="' + str(y+4) + '" font-size="11" fill="black">' + str(i) + '</text>\n'  # 6 = half font size
+
+        # Lines between boxes #
+        for line in self.lines: 
+            box1 = line["boxLeft"]
+            box2 = line["boxRight"]
+            person1 = self.ids[box1]
+            person2 = self.ids[box2]
+
+            if self.rechtwinklig:
+                ret = ret + \
+                    '<line x1="' + str(round(person2["x"] + self.boxWidth/2)) + \
+                        '" y1="' + str(round(person2["y"] + self.minHeight + 10)) + \
+                        '" x2="' + str(round(person2["x"] + self.boxWidth/2)) + \
+                        '" y2="' + str(round(person2["y"] + self.minHeight + 30)) + \
+                        '" stroke="black" stroke-width="1" />' + \
+                    '<line x1="' + str(round(person2["x"] + self.boxWidth/2)) + \
+                        '" y1="' + str(round(person2["y"] + self.minHeight + 30)) + \
+                        '" x2="' + str(round(person1["x"] + self.boxWidth/2)) + \
+                        '" y2="' + str(round(person2["y"] + self.minHeight + 30)) + \
+                        '" stroke="black" stroke-width="1" />' + \
+                    '<line x1="' + str(round(person1["x"] + self.boxWidth/2)) + \
+                        '" y1="' + str(round(person2["y"] + self.minHeight + 30)) + \
+                        '" x2="' + str(round(person1["x"] + self.boxWidth/2)) + \
+                        '" y2="' + str(round(person1["y"])) + \
+                        '" stroke="black" stroke-width="1" />'
+            else:
+                ret = ret + \
+                    '<line x1="' + str(round(person1["x"] + self.boxWidth/2)) + \
+                        '" y1="' + str(round(person1["y"])) + \
+                        '" x2="' + str(round(person2["x"] + self.boxWidth/2)) + \
+                        '" y2="' + str(round(person2["y"] + self.minHeight + 10)) + \
+                        '" stroke="black" stroke-width="1" />'
+                
+        ret = ret + '</svg>'
+
+        # boxes with person data (<div>) #
+        for key in self.ids:
+            person = self.ids[key]
+            if person["SEX"] == 'm':
+                sex_class = 'man'
+            elif person["SEX"] in ('f', 'w'):
+                sex_class = 'woman'
+            ret = ret + "\n<div class='box " + sex_class + "' style='top: " + str(person["y"])  + \
+                  "px; left: " + str(person["x"]) + "px;'><b>" + \
+                           person["GIVN"] + \
+                  "<br>" + person["SURN"] + \
+                  "</b><br>" + person["birth"] + \
+                  "<br>" + person["death"] + \
+                  "</div>\n"
+            
+        ret = ret + "\n  </div>\n</body>\n</html>"
+        return ret
 
 
 class GraphList():
@@ -383,6 +523,10 @@ class GraphList():
         graph = GraphDescendant(self.main, idList, lineList, minYear, maxYear)
         self.list.append(graph)
         return graph    
+    def add_graph_descendant_html(self, idList, lineList, minYear, maxYear):
+        graph = GraphDescendantHtml(self.main, idList, lineList, minYear, maxYear)
+        self.list.append(graph)
+        return graph
     def setPerson(self, id):
         if id == "":
             return

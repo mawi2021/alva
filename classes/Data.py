@@ -5,15 +5,133 @@ import sqlite3
 
 class Data():
 
-    def __init__(self, main, configData):
+    def __init__(self, main):
         super(Data, self).__init__()
-        self.main         = main
-        self.configData   = configData
-        self.conn         = None
-        self.cursor       = None
-        self.indi_columns = []
-        self.fam_columns  = []
+        self.main          = main
+        self.conn          = None
+        self.cursor        = None
+        self.conn_config   = None
+        self.cursor_config = None
+        self.base_dir      = os.path.dirname(__file__) + os.sep + ".." + os.sep
+        self.project       = None
+        self.indi_columns = [   ["id",          "INTEGER PRIMARY key"],
+                                ["GIVN",        "TEXT"],
+                                ["SURN",        "TEXT"],
+                                ["SEX",         "TEXT"],
+                                ["BIRT_DATE",   "TEXT"],
+                                ["BIRT_PLAC",   "TEXT"],
+                                ["DEAT_DATE",   "TEXT"],
+                                ["DEAT_PLAC",   "TEXT"],
+                                ["url",         "TEXT"],
+                                ["comment",     "TEXT"],
+                                ["media",       "TEXT"],
+                                ["source",      "TEXT"],
+                                ["finished",    "TEXT"],
+                                ["father",      "INTEGER"],
+                                ["mother",      "INTEGER"],
+                                ["birthname",   "TEXT"],
+                                ["no_child",    "TEXT"],
+                                ["guess_birth", "TEXT"],
+                                ["guess_death", "TEXT"]
+                            ]
+        self.fam_columns  = [   ["id",          "INTEGER PRIMARY key"],
+                                ["HUSB",        "INTEGER"],
+                                ["WIFE",        "INTEGER"],
+                                ["MARR_DATE",   "TEXT"],
+                                ["MARR_PLAC",   "TEXT"],
+                                ["comment",     "TEXT"]
+                            ]
+        self.conf_columns  = [  ["id",          "INTEGER PRIMARY key"],
+                                ["config_name", "TEXT"],
+                                ["property",    "TEXT"],
+                                ["value",       "TEXT"]
+                            ]
+        self.check_conf_db()
 
+    def check_conf_db(self):
+        # Check existence of config subdirectory
+        dir_conf = self.base_dir + "config" + os.sep
+        if not os.path.exists(dir_conf):
+            os.makedirs(dir_conf)
+        
+        # Connect to or create config-database
+        self.conn_config = sqlite3.connect(dir_conf + "config.db") 
+        self.cursor_config = self.conn_config.cursor()
+        self.cursor_config.execute("SELECT name FROM sqlite_master WHERE type='table';") 
+
+        found_conf = False
+        for tabelle in self.cursor_config.fetchall():
+            if "CONF" == tabelle[0]:
+                found_conf = True
+                break
+
+        # Check existence or create table CONF in config-database
+        if not found_conf:
+            field_str = ""
+            first = True
+            for col in self.conf_columns:
+                if first:
+                    field_str = col[0] + " " + col[1]
+                    first = False
+                else:
+                    field_str = field_str + ",\n" + col[0] + " " + col[1]
+            self.cursor_config.execute("""CREATE TABLE IF NOT EXISTS CONF (""" + field_str + """)""")
+        else:
+            self.cursor_config.execute("PRAGMA table_info(CONF)")
+            fields = [row[1] for row in self.cursor_config.fetchall()]  # column name in index 1
+            for col in self.conf_columns:
+                if col[0] not in fields:
+                    self.cursor.execute("ALTER TABLE CONF ADD COLUMN " + col[0] + " " + col[1] + ";")
+                    self.conn.commit()
+
+        # Check existence or create property table_columns as default
+        table_columns = self.get_conf_attribute("global", "table_columns")
+        if not table_columns:
+            self.set_conf_attribute("global", "table_columns", 'id:ID,finished:Fertig,' \
+                    + 'SURN:Nachname,birthname:geb.,GIVN:Vorname,BIRT_DATE:Geb. Datum,' \
+                    + 'BIRT_PLAC:Geb. Ort,DEAT_DATE:Tod Datum,DEAT_PLAC:Tod Ort,' \
+                    + 'father:VaterID,mother:MutterID,SEX:Geschlecht,no_child:Kinderlos,' \
+                    + 'guess_birth:Geburtsjahr geschätzt,guess_death:Todesjahr geschätzt')
+        
+        self.project = self.get_project() 
+    def init_project(self):
+        if self.project in (None, ""):
+            self.select_project()
+        else:
+            self.set_project(self.project)
+    def check_db_structure(self):
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';") 
+        tabellen = self.cursor.fetchall()
+        found_indi = False
+        found_fam  = False
+
+        for tabelle in tabellen:
+            if "INDI" == tabelle[0]:
+                found_indi = True
+            elif "FAM" == tabelle[0]:
+                found_fam = True
+
+        # Table INDI #
+        if not found_indi:
+            self.create_db_tab_indi()
+        else:
+            self.cursor.execute("PRAGMA table_info(INDI)")
+            fields = [row[1] for row in self.cursor.fetchall()]  # column name in index 1
+            for col in self.indi_columns:
+                if col[0] not in fields:
+                    self.cursor.execute("ALTER TABLE INDI ADD COLUMN " + col[0] + " " + col[1] + ";")
+                    self.conn.commit()
+
+        # Table FAM #
+        if not found_fam:
+            self.create_db_tab_fam()
+        else:
+            self.cursor.execute("PRAGMA table_info(FAM)")
+            fields = [row[1] for row in self.cursor.fetchall()]  # column name in index 1
+            for col in self.fam_columns:
+                if col[0] not in fields:
+                    self.cursor.execute("ALTER TABLE FAM ADD COLUMN " + col[0] + " " + col[1] + ";")
+                    self.conn.commit()
     def convert_data_format_json_to_db(self, file):
         # ----- Figure out codepage of file ----- #
         bytes = min(32, os.path.getsize(file))
@@ -136,25 +254,6 @@ class Data():
                            + fields[2]  + "','" + fields[23] + "','" + fields[6]  + "','" + fields[10] + "'"
 
                 self.cursor.execute("INSERT INTO INDI ("+ tab_fields + ") VALUES (" + val_fields + ")")
-                # self.create_person(persID)                                  # 0  id
-                # self.set_indi_attribute(persID, "GIVN", fields[1])          # 1  #§vorname
-                # self.set_indi_attribute(persID, "SURN", fields[3])          # 3  #§nachname
-                # self.set_indi_attribute(persID, "SEX", fields[4])           # 4  #§geschlecht
-                # self.set_indi_attribute(persID, "BIRT_DATE", fields[5])     # 5  #§gebdat
-                # self.set_indi_attribute(persID, "BIRT_PLAC", fields[7])     # 7  #§gebort
-                # self.set_indi_attribute(persID, "DEAT_DATE", fields[9])     # 9  #§sterbedat
-                # self.set_indi_attribute(persID, "DEAT_PLAC", fields[11])    # 11 #§sterbeort
-                # self.set_indi_attribute(persID, "url", urls)                # 19 #§url .. # 22 #§url4
-                # self.set_indi_attribute(persID, "comment", fields[18])      # 18 #§kommentar
-                # media
-                # self.set_indi_attribute(persID, "source", source)           # 17 #§quelle & 8 #§gebRegister & # 12 #§sterbeRegister
-                # self.set_indi_attribute(persID, "finished", "")             # 24 #§inKartei => finished without taking values
-                # self.set_indi_attribute(persID, "father", int(fields[15]))  # 15 #§idvater
-                # self.set_indi_attribute(persID, "mother", int(fields[16]))  # 16 #§idmutter
-                # self.set_indi_attribute(persID, "birthname", fields[2])     # 2  #§gebname
-                # self.set_indi_attribute(persID, "no_child", fields[23])     # 23 #§kinderlos    
-                # self.set_indi_attribute(persID, "guess_birth", fields[6])   # 6  #§gebDatGeraten 
-                # self.set_indi_attribute(persID, "guess_death", fields[10])  # 10 #§sterbeDatGeraten  
             self.conn.commit()  
 
         # --------------------------- #
@@ -202,43 +301,32 @@ class Data():
                 # 5  #§kommentar
             self.conn.commit()  
     def create_db(self, project_name):
-        self.conn = sqlite3.connect(self.configData["projectDir"] + "/" + project_name + ".db") 
+        self.conn = sqlite3.connect(self.base_dir + "config" + os.sep + project_name + ".db") 
         self.cursor = self.conn.cursor()
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS INDI (
-            id          INTEGER PRIMARY key,
-            GIVN        TEXT,
-            SURN        TEXT,
-            SEX         TEXT,
-            BIRT_DATE   TEXT,
-            BIRT_PLAC   TEXT,
-            DEAT_DATE   TEXT,
-            DEAT_PLAC   TEXT,
-            url         TEXT,
-            comment     TEXT,
-            media       TEXT,
-            source      TEXT,
-            finished    TEXT,
-            father      INTEGER,
-            mother      INTEGER,
-            birthname   TEXT,
-            no_child    TEXT,
-            guess_birth TEXT,
-            guess_death TEXT
-        )
-        """)
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS FAM (
-            id        INTEGER PRIMARY key,
-            HUSB      INTEGER,
-            WIFE      INTEGER,
-            MARR_DATE TEXT,
-            MARR_PLAC TEXT,
-            comment   TEXT
-        )
-        """)
-        self.get_indi_columns()
-        self.get_fam_columns()
+        self.create_db_tab_indi()
+        self.create_db_tab_fam()
+    def create_db_tab_fam(self):
+        field_str = ""
+        first = True
+        for col in self.fam_columns:
+            if first:
+                field_str = col[0] + " " + col[1]
+                first = False
+            else:
+                field_str = field_str + ",\n" + col[0] + " " + col[1]
+
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS FAM (""" + field_str + """)""")
+    def create_db_tab_indi(self):
+        field_str = ""
+        first = True
+        for col in self.indi_columns:
+            if first:
+                field_str = col[0] + " " + col[1]
+                first = False
+            else:
+                field_str = field_str + ",\n" + col[0] + " " + col[1]
+
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS INDI (""" + field_str + """)""")
     def create_family(self, famID = -1):
         if famID == -1:
             self.cursor.execute("INSERT INTO FAM DEFAULT VALUES")
@@ -263,7 +351,7 @@ class Data():
                                             )
 
         while True:
-            if not ok: return
+            if not ok: return None
 
             fileName = self.configData["projectDir"] + "/" + projectName + ".db"
 
@@ -285,6 +373,7 @@ class Data():
 
         # Create database file and create tables #
         self.create_db(projectName)
+        return projectName
     def copy_person(self, persID):  # only INDI values to be copied, no FAM
         newID = self.create_person()
         pers  = self.get_person(persID)
@@ -300,6 +389,12 @@ class Data():
         self.cursor.execute("DELETE FROM FAM WHERE WIFE = " + str(persID))
         self.cursor.execute("DELETE FROM FAM WHERE HUSB = " + str(persID))
         self.conn.commit()
+    def exists_person(self, persID):
+        self.cursor.execute("SELECT EXISTS(SELECT 1 FROM INDI WHERE id = " + str(persID) + ")") 
+        for row in self.cursor.fetchall():
+            if row[0] == 1:
+                return True
+        return False
     def get_ancestors(self, persID):
         ids = {persID:{"child":-1}}    # each record includes: persID: { <table INDI>, partners (list), birth, death, year, child }
         lines = []                     # each record includes: boxLeft, boxRight
@@ -351,14 +446,18 @@ class Data():
         for row in self.cursor.fetchall():
             list.append(row[0])
         return list
-    def get_completion_model(self, exclID, sexNot):
-        self.cursor.execute("SELECT id FROM INDI WHERE SEX != '" + sexNot + "' AND id != " + str(exclID) + " ORDER BY GIVN, SURN")
-        list = []
-        for row in self.cursor.fetchall():
-            persID = row[0]
-            line = "ID "+ str(persID) + ": " + self.get_person_string(persID) 
-            list.append(line)
-        return list
+    def get_conf_attribute(self, config_name, property):
+        query = "SELECT value FROM CONF WHERE config_name = '" + config_name + "' AND property = '" + property + "'"
+        self.cursor_config.execute(query)
+        for row in self.cursor_config.fetchall():
+            return row[0]
+        
+        if config_name == self.project and config_name != "global" and property == "table_columns":
+            fields = self.get_conf_attribute("global", "table_columns")
+            self.set_conf_attribute(self.project, "table_columns", fields)
+            return fields
+
+        return None
     def get_descendants(self, persID):
         ids = {}                       # each record includes: persID: { <table INDI>, partners (list), birth, death, year, child }
         lines = []                     # each record includes: boxLeft, boxRight
@@ -384,17 +483,24 @@ class Data():
                 lines.append({"boxLeft":child, "boxRight":key})  # sequence of boxes is important for line drawing
 
             # year of birth, min_year, max_year
-            if len(ids[key]["BIRT_DATE"]) > 4:
-                try:
-                    ids[key]["year"] = int(ids[key]["BIRT_DATE"][:4])
-                    if min_year == -1 or min_year > ids[key]["year"]:
-                        min_year = ids[key]["year"]
-                    if max_year == -1 or max_year < ids[key]["year"]:
-                        max_year = ids[key]["year"]
-                except:
-                    ids[key]["year"] = -1
-            else:
-                ids[key]["year"] = -1
+            try:
+                els = ids[key]["BIRT_DATE"].split(".")
+                if len(els) >= 3:
+                    y_int = int(els[2])
+                else:
+                    els = ids[key]["BIRT_DATE"].split("-")
+                    if len(els) >= 3:
+                        y_int = int(els[0])
+                    else:
+                        y_int = int(ids[key]["BIRT_DATE"])
+
+                ids[key]["year"] = int(y_int)
+                if min_year == -1 or min_year > ids[key]["year"]:
+                    min_year = ids[key]["year"]
+                if max_year == -1 or max_year < ids[key]["year"]:
+                    max_year = ids[key]["year"]
+            except:
+                ids[key]["year"] = -1             
 
         cnt_old = -1
         cnt = 0
@@ -404,10 +510,10 @@ class Data():
             for key in ids:
                 if ids[key]["year"] == -1:
                     cnt = cnt + 1
-                    if ids[key]["mother"] != -1 and ids[ids[key]["mother"]]["year"] != -1:
+                    if ids[key]["mother"] != -1 and ids[key]["mother"] in ids and ids[ids[key]["mother"]]["year"] != -1:
                         ids[key]["year"] = ids[ids[key]["mother"]]["year"] + 20  # assuming that the year of birth of child is 20 years after mother
                         cnt = cnt + 1
-                    elif ids[key]["father"] != -1 and ids[ids[key]["father"]]["year"] != -1:
+                    elif ids[key]["father"] != -1 and ids[key]["father"] in ids and ids[ids[key]["father"]]["year"] != -1:
                         ids[key]["year"] = ids[ids[key]["father"]]["year"] + 20
                         cnt = cnt + 1
 
@@ -425,10 +531,6 @@ class Data():
                     return -1
             break
         return value
-    def get_fam_columns(self):
-        # Get column names for creation of dictionary
-        self.cursor.execute("PRAGMA table_info(FAM)")
-        self.fam_columns = [row[1] for row in self.cursor.fetchall()]  # column name in index 1
     def get_family_ids_as_adult(self, persID):
         self.cursor.execute("SELECT id FROM FAM WHERE HUSB = " + str(persID) + " OR WIFE = " + str(persID) + " ORDER BY id ASC")
         famIDs = []
@@ -492,24 +594,21 @@ class Data():
                     return -1
             break
         return value
-    def get_indi_columns(self):
-        # Get column names for creation of dictionary
-        self.cursor.execute("PRAGMA table_info(INDI)")
-        self.indi_columns = [row[1] for row in self.cursor.fetchall()]  # column name in index 1
-    def get_marriage(self, pers1, pers2): 
-        # Partner via marriage
-        list = []
-        if pers1 in (None, "", 0, -1) and pers2 in (None, "", 0, -1):
-            return list
+    def get_marriage(self, persID, idx): 
+        if persID in (None, "", 0, -1):
+            return {}
 
-        self.cursor.execute("SELECT * FROM FAM WHERE (HUSB = " + str(pers1) + " AND WIFE = " + str(pers2) + ")" \
-                                                 "OR (HUSB = " + str(pers2) + " AND WIFE = " + str(pers1) + ")")
+        self.cursor.execute("SELECT * FROM FAM WHERE HUSB = " + str(persID) + " OR WIFE = " + str(persID) + " ORDER BY MARR_DATE")
+        cnt = -1
         for row in self.cursor.fetchall():
+            cnt = cnt + 1
+            if cnt != idx:
+                continue
             line = {}
             for i in range(len(self.fam_columns)):
-                line[self.fam_columns[i]] = row[i]
-            list.append(line)
-        return list
+                line[self.fam_columns[i][0]] = row[i]
+            return line
+        return {}
     def get_partners_blood(self, persID):                # Partner with same child
         self.cursor.execute("SELECT DISTINCT father, mother FROM INDI WHERE father = " + str(persID) + " or mother = " + str(persID) + " ORDER BY GIVN, SURN")
         list = []
@@ -523,24 +622,30 @@ class Data():
         for row in self.cursor.fetchall():
             for i in range(len(self.indi_columns)):
                 if row[i]:
-                    pers_dict[self.indi_columns[i]] = row[i]
+                    pers_dict[self.indi_columns[i][0]] = row[i]
                 else:
-                    pers_dict[self.indi_columns[i]] = ""
-                if self.indi_columns[i] in ("father", "mother"):
-                    if pers_dict[self.indi_columns[i]] in (None, "", 0):
-                        pers_dict[self.indi_columns[i]] = -1
+                    pers_dict[self.indi_columns[i][0]] = ""
+
+                if self.indi_columns[i][0] in ("father", "mother"):
+                    if pers_dict[self.indi_columns[i][0]] in (None, "", 0):
+                        pers_dict[self.indi_columns[i][0]] = -1
+
+                    if pers_dict[self.indi_columns[i][0]] != -1: # check, if person in DB
+                        if not self.exists_person(pers_dict[self.indi_columns[i][0]]):
+                            self.set_indi_attribute(persID, self.indi_columns[i][0], -1)
+                            pers_dict[self.indi_columns[i][0]] = -1
         return pers_dict
     def get_person_for_table(self, persID):
         # List of key fields, which is used for the table #
-        fields = self.configData["personListFields"].keys()
-        fields_str = ", ".join(fields)            
+        fields_str, fields, field_list = self.get_table_col_fields()
         self.cursor.execute("SELECT " + fields_str + " FROM INDI WHERE id = " + str(persID))
         line = []
         for row in self.cursor.fetchall():
             line = []
             i = -1
-            for field in fields:
+            for field_json in field_list:
                 i = i + 1
+                field = field_json.split(":")[0]
                 if field in ("father", "mother"):
                     if row[i] in (None, 0, -1):
                         line.append("")
@@ -550,30 +655,90 @@ class Data():
                     line.append(row[i])
         return line
     def get_persons_for_table(self):
-        fields = self.configData["personListFields"].keys()  # List of key fields, which is used for the table #
-        fields_str = ", ".join(fields)      
+        fields_str, _, field_list = self.get_table_col_fields()
         self.cursor.execute("SELECT " + fields_str + " FROM INDI ORDER BY id")
         lines = []        
         for row in self.cursor.fetchall():
             line = []
             i = -1
-            for field in fields:
+            for element in field_list:
+                field = element.split(":")[0]
                 i = i + 1
                 if field in ("father", "mother"):
                     if row[i] in (None, 0, -1):
                         line.append("")
                     else:
                         line.append(row[i])
+                elif field in ("BIRT_DATE", "DEAT_DATE"):
+                    if not row[i]:
+                        line.append("")
+                    else:
+                        els = row[i].split("-")
+                        if len(els) >= 3:
+                            if els[1] == '00' and els[2] == '00':
+                                line.append(els[0])
+                            else:
+                                line.append(els[2] + "." + els[1] + "." + els[0])
+                        elif len(els) == 1:  # no "-" in date
+                            els = row[i].split(".")
+                            if len(els) >= 3:
+                                if els[0] == '00' and els[1] == '00':
+                                    line.append(els[2])
+                                else:
+                                    line.append(els[0] + "." + els[1] + "." + els[2])
+                            else:
+                                line.append(row[i])
+                        else:
+                            line.append(row[i])
                 else:
                     line.append(row[i])
             lines.append(line)
         return lines
-    def get_person_string(self, persID):
-        if persID == -1: 
-            return ""
-        obj = self.get_person(persID)
-        line = obj["GIVN"] + " " + obj["SURN"] + " / geb. " + obj["BIRT_DATE"] + " in " + obj["BIRT_PLAC"] + " / gest. " + obj["DEAT_DATE"] + " in " + obj["DEAT_PLAC"] + " "
-        return line
+    def get_person_strings_for_value_help(self, exclID, sexNot):
+        self.cursor.execute("SELECT id FROM INDI WHERE SEX != '" + sexNot + "' AND id != " + str(exclID) + " ORDER BY GIVN, SURN")
+        list = []
+        for row in self.cursor.fetchall():
+            persID = row[0]
+            line = "ID "+ str(persID) + ": " + self.main.get_person_string(persID) 
+            list.append(line)
+        return list
+    def get_project(self):
+        if self.project in (None, ""):
+            self.cursor_config.execute("SELECT value FROM CONF WHERE config_name = 'global' AND property = 'project'")
+            for row in self.cursor_config.fetchall():
+                self.project = row[0]
+        return self.project
+    def get_table_col_fields(self):
+        fields = self.get_conf_attribute(self.project, "table_columns")
+        fields_str = ""
+        field_list = fields.split(",")
+        first = True
+        for field_json in field_list:
+            field = field_json.split(":")
+            if first:
+                fields_str = field[0]
+                first = False
+            else:
+                fields_str = fields_str + "," + field[0]
+        return (fields_str, fields, field_list)
+    def get_table_col_number(self, fieldname):
+        table_columns = self.get_conf_attribute(self.project, "table_columns")
+        field_list = table_columns.split(",")
+        num = -1
+        for field_json in field_list:
+            num = num + 1
+            field = field_json.split(":")[0]
+            if field == fieldname:
+                return num
+        return -1
+    def get_table_col_texts(self):
+        table_columns = self.get_conf_attribute(self.project, "table_columns")
+        field_list = table_columns.split(",")
+        txt_list = []
+        for field_json in field_list:
+            field = field_json.split(":")[1]
+            txt_list.append(field)
+        return txt_list
     def import_data(self):
         # ----- Get Filename, which is to be imported ----- #
         fileDlg = QFileDialog()
@@ -626,64 +791,84 @@ class Data():
     def on_exit(self):
         self.conn.close()
         return 
-    def open_project(self):
-        print("Data.openProject")
-
+    def select_project(self):                            # asks for project from list of existing projects
         # Search for files in "data" subdirectory
         items = []
-        files = os.listdir(self.configData["projectDir"])
+        files = os.listdir(self.base_dir + "data")
         for file in files:
             if file.endswith(".db"):
                 items.append(file.removesuffix(".db"))
 
         if len(items) == 0:
-            QMessageBox.information( 
-                self.main, \
-                "Öffnen nicht möglich", \
-                "Es wurde noch kein Projekt angelegt", \
-                buttons=QMessageBox.Ok
-            )
-            return
+            project = self.create_project()
+        else:
+            project, ok = QInputDialog.getItem(self.main, "Auswahl des Projektes", \
+                "Projekte", items, 0, False)
 
-        project, ok = QInputDialog.getItem(self.main, "Auswahl des Projektes", \
-            "Projekte", items, 0, False)
-
-        if not ok:
+        if not ok or not project:
             print("  Auswahl abgebrochen")
-            return
-
-        if not project:
+        elif not project:
             print("Kein Projekt ausgewählt")
-            return
+        else:
+            self.set_project(project)
+    def set_conf_attribute(self, config_name, property, value):
+        query = "UPDATE CONF SET value = '" + value + "' WHERE config_name = '" \
+              + config_name + "' AND property = '" + property + "'"
+        self.cursor_config.execute(query)
+        self.conn_config.commit()
 
-        print("  Auswahl Projekt: " + project)
-        self.set_project(project)
+        if self.cursor_config.rowcount == 0:
+            query = "INSERT INTO CONF (config_name, property, value) VALUES ('" \
+                  + config_name + "', '" + property + "', '" + value + "')"
+            self.cursor_config.execute(query)
+            self.conn_config.commit()
+    def set_fam_attribute(self, famID, attribute, value):
+        if famID == -1:
+            return
+        if attribute in ("HUSB", "WIFE"):
+            self.cursor.execute("UPDATE FAM SET " + attribute + " = " + str(value) + " WHERE id = " + str(famID))
+        else:
+            self.cursor.execute("UPDATE FAM SET " + attribute + " = '" + value + "' WHERE id = " + str(famID))
+        self.conn.commit()
     def set_indi_attribute(self, persID, attribute, value):
+        if persID == -1:
+            return
         # integer type #
         if attribute in ("father", "mother"):
             self.cursor.execute("UPDATE INDI SET " + attribute + " = "+ str(value) + " WHERE id = " + str(persID))
         # boolean type #
-        elif attribute in ("finished"):
+        elif attribute in ("finished", "guess_birth", "guess_death"):
             if value:
                 self.cursor.execute("UPDATE INDI SET " + attribute + " = 'X' WHERE id = " + str(persID))
             else:
                 self.cursor.execute("UPDATE INDI SET " + attribute + " = '' WHERE id = " + str(persID))
+        # date conversion necessary
+        elif attribute in ("BIRT_DATE", "DEAT_DATE"):
+            elems = value.split(".")
+            if len(elems) >= 3:
+                dat = elems[2] + "-" + elems[1] + "-" + elems[0]
+                self.cursor.execute("UPDATE INDI SET " + attribute + " = '" + dat +"' WHERE id = " + str(persID))
+            else:
+                self.cursor.execute("UPDATE INDI SET " + attribute + " = '" + value +"' WHERE id = " + str(persID))
         # text type #
         else:
             self.cursor.execute("UPDATE INDI SET " + attribute + " = '" + value +"' WHERE id = " + str(persID))
         self.conn.commit()
     def set_project(self, project_name):
-        db_filename = self.configData["projectDir"] + "/" + project_name + ".db"
+        self.project = project_name
+        self.set_conf_attribute("global", "project", self.project)
+
+        # Create / enhance project database and tables, if necessary
+        db_filename = self.base_dir + "data" + os.sep + project_name + ".db"
         if not os.path.exists(db_filename):
             self.create_db(project_name)
-        else:
-            self.conn = sqlite3.connect(db_filename) 
-            self.cursor = self.conn.cursor()
-            self.get_fam_columns()
-            self.get_indi_columns()
+
+        self.conn = sqlite3.connect(db_filename) 
+        self.cursor = self.conn.cursor()
+        self.check_db_structure()
     
-        self.main.setWindowTitle("Alva - " + project_name)  
-        self.configData["currProject"] = project_name
+        self.main.setWindowTitle('Alva -> Stammbaum "' + project_name + '"')  
+        self.set_conf_attribute("global", "project", project_name)
 
         # In case, graphs are open, windows are closed
         self.main.widget.closeGraphs()
@@ -696,8 +881,6 @@ class Data():
             self.main.widget.set_person(data[0][0])    # first person, always first value is "id"
         else:
             self.main.clear_widgets()
-
-
     def exportData(self):
         # Conversion of json fle to ged file
         fileDlg = QFileDialog()
@@ -910,6 +1093,7 @@ class Data():
         f.close()
         
         print("----- Export abgeschlossen -----")
+
     def _convertDateToGedFormat(self, date):
         dayStr = ""
         monthStr = ""

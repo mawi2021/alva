@@ -9,10 +9,9 @@ from classes.PersonWidget import PersonWidget
 # class MainWidget & MainWindowMenu & class MainWindowToolbars
 
 class MainWidget(QWidget):
-    def __init__(self, main, data):
+    def __init__(self, main):
         super().__init__()
         self.main       = main
-        self.data       = data
         self.graphList  = ""
 
         # ----- Constants ----------------------------------------------------------------------- #
@@ -28,7 +27,7 @@ class MainWidget(QWidget):
         self.tableW = TableWidget(self.main)
         self.tableW.setContentsMargins(0,0,0,0)
 
-        self.persFrame = PersonWidget(self.main, self.data)
+        self.persFrame = PersonWidget(self.main)
         self.persFrame.refreshBackground()
 
         statusFrame = QFrame()

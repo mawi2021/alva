@@ -7,17 +7,17 @@ from PyQt5.QtWidgets import QTabWidget, QVBoxLayout, QWidget, QLabel, QLineEdit,
                             QButtonGroup, QCompleter, QInputDialog, QDialog, QSizePolicy, \
                             QGroupBox, QCheckBox, QScrollArea
 from PyQt5.QtCore    import *
-from PyQt5.QtGui     import QPalette
 from functools       import partial
-import json
 
 class PersonWidget(QScrollArea):
 
-    def __init__(self, main, data):
+    def __init__(self, main):
         super().__init__()
-        self.main       = main
-        self.data       = data
-        
+        self.main          = main
+        self.famWidgetList = [] 
+        # self.famWidgetList[i]["childRows"][j]["childLbl"].text() is the text of j-th child in i-th family
+        # self.famWidgetList[i]["childRows"][j]["childNavBtn"].text() is the ID of j-th child in i-th family
+
         self.navigationListBack = []
         self.ID                 = -1
         self.persLbl            = QLabel("")
@@ -35,7 +35,7 @@ class PersonWidget(QScrollArea):
         self.setWidget(content_widget)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded) 
-        self.setWidgetResizable(False)
+        self.setWidgetResizable(True)
 
         # Initialize tab screen
         qTabWidget = QTabWidget()
@@ -52,12 +52,7 @@ class PersonWidget(QScrollArea):
         self.tabFamily  = QWidget()
         self.formFamilyLayout = QFormLayout()
         qTabWidget.addTab(self.tabFamily, "Partner und Kinder")
-        self.famWidgetList = [] # <============
         self.initUI_add_family_fields()
-        
-        self.tabRaw     = QWidget()
-        qTabWidget.addTab(self.tabRaw, "Raw")
-        self.initUI_add_raw_fields()
 
         # Central Person #        
         layout.addWidget(self.persLbl)
@@ -95,6 +90,7 @@ class PersonWidget(QScrollArea):
         # ----- PERSON ----- #
         persGB         = QGroupBox("Person")
         persGB.setStyleSheet("QGroupBox {font-weight:bold;padding-top:10px;margin:5px;}")
+        persGB.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         formPersLayout = QFormLayout()
         persGB.setLayout(formPersLayout)
                 
@@ -139,18 +135,21 @@ class PersonWidget(QScrollArea):
         formPersLayout.addRow("Geschlecht", hboxS)
 
         # Birth #
-        lBDat = QLabel("Datum")
-        lBPlac = QLabel("Ort")
+        hboxB = QHBoxLayout()
+        lBDat = QLabel("Datum (Tag.Monat.Jahr)")
+        hboxB.addWidget(lBDat)
         eBirthDat = QLineEdit("", objectName="BIRT_DATE")
+        # eBirthDat.setInputMask("00.00.0000; ")  # 0 = Pflicht-Ziffer, _ = Placeholder
+        # eBirthDat.setPlaceholderText("TT.MM.JJJJ")
+        eBirthDat.setFixedWidth(70)
         eBirthDat.editingFinished.connect(partial(self.on_editing_finished, "BIRT_DATE"))
-        lBirthDatEstim = QLabel("Datum geschätzt")
-        eBirthDatEstim = QLineEdit("", objectName="guess_birth")
-        eBirthDatEstim.editingFinished.connect(partial(self.on_editing_finished, "guess_birth"))
+        hboxB.addWidget(eBirthDat)
+        lBirthDatEstim = QLabel("     Datum geschätzt")
+        eBirthDatEstim = QCheckBox("", objectName="guess_birth")
+        eBirthDatEstim.stateChanged.connect(partial(self.on_editing_finished, "guess_birth"))
+        lBPlac = QLabel("     Ort")
         eBirthPlac = QLineEdit("", objectName="BIRT_PLAC")
         eBirthPlac.editingFinished.connect(partial(self.on_editing_finished, "BIRT_PLAC"))
-        hboxB = QHBoxLayout()
-        hboxB.addWidget(lBDat)
-        hboxB.addWidget(eBirthDat)
         hboxB.addWidget(lBirthDatEstim)
         hboxB.addWidget(eBirthDatEstim)
         hboxB.addWidget(lBPlac)
@@ -158,17 +157,20 @@ class PersonWidget(QScrollArea):
         formPersLayout.addRow("Geburt:", hboxB)
 
         # Death #
-        lDDat = QLabel("Datum")
-        lDPlac = QLabel("Ort")
+        hboxD = QHBoxLayout()
+        lDDat = QLabel("Datum (Tag.Monat.Jahr)")
+        hboxD.addWidget(lDDat)
         eDeathDat = QLineEdit("", objectName="DEAT_DATE")
+        # eDeathDat.setInputMask("00.00.0000; ")  # 0 = Pflicht-Ziffer, _ = Placeholder
+        # eDeathDat.setPlaceholderText("TT.MM.JJJJ")
+        eDeathDat.setFixedWidth(70)
         eDeathDat.editingFinished.connect(partial(self.on_editing_finished, "DEAT_DATE"))
-        lDeathDatEstim = QLabel("Datum geschätzt")
-        eDeathDatEstim = QLineEdit("", objectName="guess_death")
-        eDeathDatEstim.editingFinished.connect(partial(self.on_editing_finished, "guess_death"))
+        lDeathDatEstim = QLabel("     Datum geschätzt")
+        eDeathDatEstim = QCheckBox("", objectName="guess_death")
+        eDeathDatEstim.stateChanged.connect(partial(self.on_editing_finished, "guess_death"))
+        lDPlac = QLabel("     Ort")
         eDeathPlac = QLineEdit("", objectName="DEAT_PLAC")
         eDeathPlac.editingFinished.connect(partial(self.on_editing_finished, "DEAT_PLAC"))
-        hboxD = QHBoxLayout()
-        hboxD.addWidget(lDDat)
         hboxD.addWidget(eDeathDat)
         hboxD.addWidget(lDeathDatEstim)
         hboxD.addWidget(eDeathDatEstim)
@@ -180,6 +182,8 @@ class PersonWidget(QScrollArea):
         persURLs = QTextEdit(objectName="url")
         persURLs.setAcceptRichText(False)  # => Plain-Text only
         persURLs.focusOutEvent = self.on_person_url_changed
+        persURLs.setFixedHeight(200)
+        persURLs.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         formPersLayout.addRow("URLs", persURLs)
 
         persComment = QTextEdit(objectName="comment")
@@ -228,22 +232,18 @@ class PersonWidget(QScrollArea):
         formParentLayout.addRow("Mutter", hboxM)
         
         # ----- FAMILY ----- #
-        familyGB         = QGroupBox("Partner und Kinder")
-        familyGB.setStyleSheet("QGroupBox {font-weight:bold;margin:5px;padding-top:10px; width:100%;}")
-        formFamilyLayout = QFormLayout()
-        familyGB.setLayout(formFamilyLayout)        
-        
+        familyGB         = QLabel("Partner und Kinder")
+        familyGB.setStyleSheet("QLabel {font-weight:bold;padding-top:10px; width:100%;}")
         ownFamily = QTextEdit(objectName="general>ownFamily")
+        ownFamily.setStyleSheet("QTextEdit {margin:5px;padding-left:5px;}")
         ownFamily.setReadOnly(True)
-        hboxF = QHBoxLayout()
-        hboxF.addWidget(ownFamily)
-        formFamilyLayout.addRow("", hboxF)
         
         # ----- end ----- #
         globLayout = QVBoxLayout()
         globLayout.addWidget(persGB)
         globLayout.addWidget(parentGB)   
         globLayout.addWidget(familyGB)   
+        globLayout.addWidget(ownFamily)
         self.tabGeneral.setLayout(globLayout)
     def initUI_add_parents_fields(self):
     
@@ -334,29 +334,21 @@ class PersonWidget(QScrollArea):
         self.formFamilyLayout.addRow("", newRelationship)
 
         self.tabFamily.setLayout(self.formFamilyLayout)
-    def initUI_add_raw_fields(self):
-        formLayout = QVBoxLayout()
-
-        self.rawText = QTextEdit()
-        self.rawText.setReadOnly(True)
-        formLayout.addWidget(self.rawText)
-
-        self.tabRaw.setLayout(formLayout)
     def on_editing_finished(self, field, state=None):
-        if field in ("finished"):                             # QCheckBox
+        if field in ("finished", "guess_birth", "guess_death"):  # QCheckBox
             new = state == Qt.Checked
             old = not(new)
-        elif field in ("comment", "media", "source", "url"):  # QTextEdit
+        elif field in ("comment", "media", "source", "url"):     # QTextEdit
             wid = self.tabGeneral.findChild(QTextEdit, field)
-            old = self.data.get_indi_attribute(self.ID, field)
+            old = self.main.get_person_attribute(self.ID, field)
             new = wid.toPlainText()
-        else:                                                 # QLineEdit
+        else:                                                    # QLineEdit
             wid = self.tabGeneral.findChild(QLineEdit, field)
-            old = self.data.get_indi_attribute(self.ID, field)
+            old = self.main.get_person_attribute(self.ID, field)
             new = wid.text()
 
         if new != old:
-            self.data.set_indi_attribute(self.ID, field, new)
+            self.main.set_person_attribute(self.ID, field, new)
             if self.main.is_field_in_table(field):
                 self.main.update_table_row(self.ID)
     def on_person_comment_changed(self, event):
@@ -369,35 +361,17 @@ class PersonWidget(QScrollArea):
         self.on_editing_finished("url")
     def refreshBackground(self):
         self.setStyleSheet(self.bgColorNormal)
+    def set_checkbox(self, fieldname):
+        value = self.main.get_person_attribute(self.ID, fieldname)
+        wid = self.tabGeneral.findChild(QCheckBox, fieldname)
+        wid.setChecked(True if value == 'X' else False)        
     def set_person(self, id):
         self.ID = id
-        self.persLbl.setText(self.data.get_person_string(id))
+        self.persLbl.setText(self.main.get_person_string(id))
 
         self.set_person_details()  # Details of the Person
         self.set_person_parents()  # Parents
         self.set_person_own_fam()  # Partner, Marriage and Children
-
-        # ----- Raw Data ----- #
-        self.rawText.clear()
-        if self.ID >= 0:
-            data = self.data.get_person(self.ID)
-            middle = "Eigene Person:\n------------------\n"
-            content = middle + json.dumps(data, indent=2)
-            middle = "\n\nFamilie(n) mit Kindern:\n--------------------------\n"
-            fams = data.get("FAMS",[])
-            for fam in fams:
-                ret2, famData = self.data.getFamily(fam)
-                if ret2:
-                    content = content + middle + json.dumps(famData, indent=2)
-                    middle = ""
-            middle = "\n\nFamilie mit Eltern:\n---------------------\n"
-            famc = data.get("FAMC")
-            if famc != None:
-                ret2, famData = self.data.getFamily(famc)
-                if ret2:
-                    content = content + middle + json.dumps(famData, indent=2)
-                    middle = ""
-            self.rawText.insertPlainText(content)
 
         # Person Navigation Stack
         if self.ID >= 0:
@@ -411,7 +385,7 @@ class PersonWidget(QScrollArea):
         else:
             wid.setText("")
         
-        finished = self.data.get_indi_attribute(self.ID, "finished")
+        finished = self.main.get_person_attribute(self.ID, "finished")
         widFini  = self.tabGeneral.findChild(QCheckBox,"finished")
         widFini.setChecked(finished)
 
@@ -421,7 +395,7 @@ class PersonWidget(QScrollArea):
         self.set_text_field("birthname")      # Maiden name
             
         # Sex #
-        sex = self.data.get_indi_attribute(self.ID, "SEX")
+        sex = self.main.get_person_attribute(self.ID, "SEX")
         widM = self.tabGeneral.findChild(QRadioButton,"general>sexMan")
         widW = self.tabGeneral.findChild(QRadioButton,"general>sexWoman")
         widO = self.tabGeneral.findChild(QRadioButton,"general>sexOhne")
@@ -433,17 +407,17 @@ class PersonWidget(QScrollArea):
             widO.setChecked(True)
 
         self.set_text_field("BIRT_DATE")      # Birth Date
-        self.set_text_field("guess_birth")    # Birth Year Guess
+        self.set_checkbox("guess_birth")      # Birth Year Guess
         self.set_text_field("BIRT_PLAC")      # Birth Place 
         self.set_text_field("DEAT_DATE")      # Death Date            
-        self.set_text_field("guess_death")    # Death Year Guess
+        self.set_checkbox("guess_death")      # Death Year Guess
         self.set_text_field("DEAT_PLAC")      # Death Place 
         self.set_textarea_field("url")        # URL 
         self.set_textarea_field("comment")    # Comment 
         self.set_textarea_field("media")      # Media 
         self.set_textarea_field("source")     # Source 
     def set_person_own_fam(self):
-        famList = self.data.get_family_as_adult(self.ID)
+        famList = self.main.get_family_as_adult(self.ID)
 
         if len(famList) > 0:
             for famDetails in famList: #len(famList)):
@@ -456,7 +430,7 @@ class PersonWidget(QScrollArea):
                 # Partner #
                 pid = famDetails.get("partnerID","")
                 if pid and pid != -5:
-                    wids["partner"].setText(self.data.get_person_string(pid))
+                    wids["partner"].setText(self.main.get_person_string(pid))
                     wids["partnerNavButton"].setText(str(pid))
                 else:
                     wids["partner"].setText(self.clickTxt)
@@ -472,9 +446,9 @@ class PersonWidget(QScrollArea):
                         childID = childrenID[j]
                         
                         if j >= numChildRows: # not enough lines => create new row
-                            self._addChild(0, self.data.get_person_string(childID), str(childID))
+                            self._addChild(0, self.main.get_person_string(childID), str(childID))
                         else: # set texts in existing row
-                            wids["childRows"][j]["childLbl"].setText(self.data.get_person_string(childID))
+                            wids["childRows"][j]["childLbl"].setText(self.main.get_person_string(childID))
                             wids["childRows"][j]["childNavBtn"].setText(str(childID))
                             wids["childRows"][j]["childDelBtn"].setText("Löschen")
                     else:
@@ -507,14 +481,14 @@ class PersonWidget(QScrollArea):
                 else:
                     self._deleteChildRow(0, wids["childRows"][j]["childNavBtn"].text())
 
-        self._updateRelationBox()
+        self.update_own_family_in_general_tab()
     def set_person_parents(self):
         widF   = self.tabGeneral.findChild(QLabel,"general>father")
         widFB  = self.tabGeneral.findChild(QPushButton,"general>fatherNav")      
         widF2  = self.tabParents.findChild(QLabel,"parents>father")
         widFB2 = self.tabParents.findChild(QPushButton,"parents>fatherNav")
-        idF = self.data.get_indi_attribute(self.ID, "father")
-        txt = self.data.get_person_string(idF)
+        idF = self.main.get_person_attribute(self.ID, "father")
+        txt = self.main.get_person_string(idF)
         if txt != "":
             widF.setText(txt)
             widFB.setText(str(idF))
@@ -526,15 +500,15 @@ class PersonWidget(QScrollArea):
             widF2.setText(self.clickTxt)
             widFB2.setText("")
         wid = self.tabParents.findChild(QTextEdit,"parents>fatherComment")
-        comm = self.data.get_indi_attribute(idF, "comment")
+        comm = self.main.get_person_attribute(idF, "comment")
         wid.setText(comm)
             
         widM  = self.tabGeneral.findChild(QLabel,"general>mother")
         widMB = self.tabGeneral.findChild(QPushButton,"general>motherNav")
         widM2  = self.tabParents.findChild(QLabel,"parents>mother")
         widMB2 = self.tabParents.findChild(QPushButton,"parents>motherNav")
-        idM = self.data.get_indi_attribute(self.ID, "mother")
-        txt = self.data.get_person_string(idM)
+        idM = self.main.get_person_attribute(self.ID, "mother")
+        txt = self.main.get_person_string(idM)
         if txt != "":
             widM.setText(txt)
             widMB.setText(str(idM))
@@ -546,20 +520,23 @@ class PersonWidget(QScrollArea):
             widM2.setText(self.clickTxt)
             widMB2.setText("")
         wid = self.tabParents.findChild(QTextEdit,"parents>motherComment")
-        comm = self.data.get_indi_attribute(idM, "comment")
+        comm = self.main.get_person_attribute(idM, "comment")
         wid.setText(comm)        
     def set_text_field(self, fieldname):
-        value = self.data.get_indi_attribute(self.ID, fieldname)
+        value = self.main.get_person_attribute(self.ID, fieldname)
+        if fieldname in ("BIRT_DATE", "DEAT_DATE"):
+            if value != "":
+                value = self.main.convert_date_to_hr(value)
         wid = self.tabGeneral.findChild(QLineEdit, fieldname)
         wid.setText(value)
     def set_textarea_field(self, fieldname):
-        value = self.data.get_indi_attribute(self.ID, fieldname)
+        value = self.main.get_person_attribute(self.ID, fieldname)
         wid = self.tabGeneral.findChild(QTextEdit, fieldname)
         wid.setText(value)
     def showSelectPersDlg(self, sex, title, exclPers, oldText, caller):
 
-        # Get Data #
-        completionList = self.data.get_completion_model(exclPers,sex)
+        # Get person string #
+        completionList = self.main.get_person_strings_for_value_help(exclPers,sex)
 
         # Create modal dialog #
         dlg = QInputDialog(self)
@@ -586,9 +563,9 @@ class PersonWidget(QScrollArea):
             if text == "": # Delete the former assignment, if available
                 if caller == 'child':
                     if sex == "m": # stands for: except man
-                        self.data.assignParent(self.ID, "", "WIFE")
+                        self.main.delete_father(self.ID)
                     else: # is "w" and stands for: except woman
-                        self.data.assignParent(self.ID, "", "HUSB")
+                        self.main.delete_father(self.ID)
                 elif caller == "partner":
                     pass
                 return True, "", self.clickTxt
@@ -599,14 +576,35 @@ class PersonWidget(QScrollArea):
             
             if caller == 'child':
                 if sex == "m": # stands for: except man
-                    self.data.set_indi_attribute(self.ID, "mother", persID)
+                    self.main.set_person_attribute(self.ID, "mother", persID)
                 else: # is "w" and stands for: except woman
-                    self.data.set_indi_attribute(self.ID, "father", persID)
+                    self.main.set_person_attribute(self.ID, "father", persID)
             elif caller == "partner":
                 pass
             return True, persID, text
         
         return False, "", "" 
+    def update_own_family_in_general_tab(self):  # updates General tab field "Partner und Kinder"
+        wid = self.tabGeneral.findChild(QTextEdit,"general>ownFamily")  #Read Only Widget
+        famList = self.main.get_family_as_adult(self.ID)
+        txt = ""
+        first = True
+
+        for famObj in famList:
+            if not first:
+                txt = txt + "<hr>"
+            else:
+                first = False
+
+            txt = txt + "Famile: " + str(famObj["id"])
+            partnerID = famObj.get("partnerID","")
+            if partnerID != "":
+                txt = txt + "<br>Partner: " + self.main.get_person_string(partnerID)
+            childrenID = famObj.get("childrenID","")
+            for childID in childrenID:
+                txt = txt + "<br>Kind: " + self.main.get_person_string(childID)
+
+        wid.setText(txt)
 
     def _addChild(self, famIdx, txtLabel, txtButton):
         if len(self.famWidgetList) <= famIdx: return
@@ -667,91 +665,82 @@ class PersonWidget(QScrollArea):
         self.main.set_person(id)
         self.ID = id
     def _onChildClick(self, wid, event):
-        oldText = wid.text()
+        old_text = wid.text()  # is the current person describing text
+
         for row in self.famWidgetList[0]["childRows"]:
             if row["childLbl"] == wid:
-                widBtn = row["childNavBtn"]  
+                widBtn = row["childNavBtn"] 
+                try:
+                    old_persID = int(widBtn.text())
+                except:
+                    old_persID = -1
                 break      
-        who = "HUSB" if self.data.getSex(self.ID) == "m" else "WIFE"
                 
-        # Get Data for auto #
-        completionList = self.data.get_completion_model(self.ID,"")
-        
+        # Person picker dialog and completer #
         dlg = QInputDialog(self)
         dlg.setWindowTitle("Kind")
         dlg.setLabelText('Name, Geburt, Ableben:')
-        if oldText == self.clickTxt:
+        if old_text == self.clickTxt:
             dlg.setTextValue("")    
         else:
-            dlg.setTextValue(oldText)
+            dlg.setTextValue(old_text)
         dlg.resize(500,100)
-        
-        # Get child (input line) #
         childDlg = dlg.findChild(QLineEdit)       
-         
-        # Add Completer with properties to child #
+        completionList = self.main.get_person_strings_for_value_help(self.ID,"")
         completer = QCompleter(completionList, childDlg)
         completer.setFilterMode(Qt.MatchContains)
         completer.setCaseSensitivity(Qt.CaseInsensitive)
         childDlg.setCompleter(completer)
         
         # Show Dialog and process return value #
-        ret, text = (dlg.exec_() == QDialog.Accepted, dlg.textValue(), )
+        ret, new_text = (dlg.exec_() == QDialog.Accepted, dlg.textValue(), )
         if ret:
-            if text == "": 
-                if oldText != "":
-                    self.data.unassignParent(oldText, who)
-                    widBtn.setText("")
+            if new_text != old_text:
+                if old_persID != -1: # delete old parent-child assignment
+                    self.main.delete_father(old_persID)
+                    self.main.delete_mother(old_persID)
+                
+                if  new_text == "":
                     wid.setText(self.clickTxt)
-            else:
-                # Get ID of child #
-                orig = text
-                pos = text.find("@")
-                if pos == -1: return False, "", ""
-                text = text[pos+1:]
-                
-                pos = text.find("@")
-                if pos == -1: return False, "", ""
-                text = "@" + text[:pos+1]
-                orig = self.data.getPersStr(text)
-                
-                # get Partner #
-                partnerID = self.famWidgetList[0]["partnerNavButton"].text()
-                ret, sex = self.data.getSex(self.ID)
-                if sex == "m":
-                    self.data.assignParents(text, partnerID, self.ID)
+                    widBtn.setText("")
                 else:
-                    self.data.assignParents(text, self.ID, partnerID)
-                widBtn.setText(text)
-                wid.setText(orig.replace(text + " ", ""))     
+                    wid.setText(new_text)  # label for person string
+                    new_persID = int(new_text[3:].split(":",2)[0])  # ID of new child 
+                    partnerID = int(self.famWidgetList[0]["partnerNavButton"].text())  # partnerID and self.ID are parent IDs
+                    sex = self.main.get_sex(self.ID)
+                    if sex == "m":
+                        self.main.set_father(new_persID, self.ID)
+                        self.main.set_mother(new_persID, partnerID)
+                    else:
+                        self.main.set_mother(new_persID, self.ID)
+                        self.main.set_father(new_persID, partnerID)
+                    widBtn.setText(str(new_persID))
 
-            self._updateRelationBox()
+        self.update_own_family_in_general_tab()
     def _onDeleteChildRow(self, xbool, childID):
-        # Unassign child from family and delete widgets #
-        self.data.removeChildFromFamily(childID)        
+        self.main.delete_father(childID)        
+        self.main.delete_mother(childID)        
         self._deleteChildRow(0, childID)
     def _onEditingMarriageDateFinished(self, wid, idx):
-        old = self.data.getMarriageDate(self.ID, idx)
+        old = self.main.get_marriage_date(self.ID, idx)
         new = wid.text()
-        
         if old != new:
-            self.data.setMarriageDate(self.ID, idx, wid.text())
-            self._updateRelationBox()
+            self.main.set_marriage_date(self.ID, idx, wid.text())
+            self.update_own_family_in_general_tab()
     def _onEditingMarriagePlaceFinished(self, wid, idx):
-        old = self.data.getMarriagePlace(self.ID, idx)
+        old = self.main.get_marriage_place(self.ID, idx)
         new = wid.text()
-        
         if old != new:
-            self.data.setMarriagePlace(self.ID, idx, wid.text())
-            self._updateRelationBox()
+            self.main.set_marriage_place(self.ID, idx, wid.text())
+            self.update_own_family_in_general_tab()
     def _onEditingRelationCommentFinished(self, wid, idx):
-        famIDs = self.data.get_family_ids_as_adult(self.ID)
+        famIDs = self.main.get_family_ids_as_adult(self.ID)
         if len(famIDs) > idx:
             famID = famIDs[idx]
-            old = self.data.get_fam_attribute(famID, "comment")
+            old = self.main.get_family_attribute(famID, "comment")
             new = wid.toPlainText()
             if old != new:
-                self.data.get_fam_attribute(famID, "comment", wid.toPlainText())
+                self.main.set_family_attribute(famID, "comment", wid.toPlainText())
     def _onFatherClick(self, wid, event):
         widText = wid.text()
         
@@ -770,7 +759,8 @@ class PersonWidget(QScrollArea):
             wid.setText(text)
     def _onFatherCommentChanged(self, event):
         wid = self.tabParents.findChild(QTextEdit,"parents>fatherComment")
-        self.data.setCommentFather(self.ID, wid.toPlainText())
+        father = self.main.get_father(self.ID)
+        self.main.set_comment(father, wid.toPlainText())
     def _onMotherClick(self, wid, event):
         widText = wid.text()
         
@@ -788,7 +778,8 @@ class PersonWidget(QScrollArea):
             wid.setText(text)
     def _onMotherCommentChanged(self, event):
         wid = self.tabParents.findChild(QTextEdit,"parents>motherComment")
-        self.data.setCommentMother(self.ID, wid.toPlainText())
+        mother = self.main.get_mother(self.ID)
+        self.main.set_comment(mother, wid.toPlainText())
     def _onNewChild(self, xbool, wid):
         self._addChild(0, self.clickTxt, "") # 0 stands for null-th partner box
     def _onNewRelationshipClick(self, event):
@@ -796,8 +787,7 @@ class PersonWidget(QScrollArea):
     def _onPartnerClick(self, wid, event):
         widText = wid.text()
 
-        ret, pers = self.data.getPerson(self.ID)
-        sex = pers.get("SEX") # is the self.ID's sex or empty if not known
+        sex = self.main.get_sex(self.ID)
         if sex == None:
             sex = ''
             
@@ -812,31 +802,34 @@ class PersonWidget(QScrollArea):
             widL.setText(text)
 
             # Get Families. If none exists, create it
-            fid_arr = self.data.getFamilies(self.ID)
+            fid_arr = self.main.get_family_ids_as_adult(self.ID)
 
             # Handle with changes
             if id != "":
                 if len(fid_arr) == 0:
-                    fid = self.data.addFamily()
+                    fid = self.main.create_family()
                 else:
                     fid = fid_arr[0]  # TODO: Welche Familie ist richtig? Bei mehreren Ehen ist das nicht klar
 
-                ret, sex_partner = self.data.getSex(id)
+                ret, sex_partner = self.main.get_sex(id)
                 if ( sex == '' or sex == 'm' or sex_partner == 'w' ) and sex_partner != 'm':
-                    self.data.setFamilyWife(fid,id)
-                    self.data.setFamilyHusband(fid,self.ID)
+                    self.main.set_wife(fid, id)
+                    self.main.set_husband(fid,self.ID)
                 else:
-                    self.data.setFamilyHusband(fid,id)
-                    self.data.setFamilyWife(fid,self.ID)
+                    self.main.set_husband(fid,id)
+                    self.main.set_wife(fid,self.ID)
 
             else:   # Assignment deleted
                 if len(fid_arr) > 0:
                     fid = fid_arr[0]  # TODO: Welche Familie ist richtig? Bei mehreren Ehen ist das nicht klar
-                    self.data.removeFamilyPartner(fid,self.ID)
+                    if sex == "m":
+                        self.main.delete_wife(fid)
+                    else:
+                        self.main.delete_husband(fid)
 
-            self._updateRelationBox()
+            self.update_own_family_in_general_tab()
     def _onSexStateClicked(self):
-        old = self.data.get_indi_attribute(self.ID, "SEX")        
+        old = self.main.get_sex(self.ID)        
         widM = self.tabGeneral.findChild(QRadioButton,"general>sexMan")
         widW = self.tabGeneral.findChild(QRadioButton,"general>sexWoman")
         if   widM.isChecked(): new = "m"
@@ -844,21 +837,6 @@ class PersonWidget(QScrollArea):
         else:                  new = ""
         
         if new != old:
-            self.data.set_indi_attribute(self.ID, "SEX", new)
+            self.main.set_sex(self.ID, new)
             self.main.update_table_row(self.ID) # always update due to coloring of id column
-    def _updateRelationBox(self):
-        wid = self.tabGeneral.findChild(QTextEdit,"general>ownFamily")  #Read Only Widget
-        famList = self.data.get_family_as_adult(self.ID)
-        txt = ""
 
-        for famObj in famList:
-            txt = txt + "Famile: " + str(famObj["id"])
-            partnerID = famObj.get("partnerID","")
-            if partnerID != "":
-                txt = txt + "<br>Partner: " + self.data.get_person_string(partnerID)
-            childrenID = famObj.get("childrenID","")
-            for childID in childrenID:
-                txt = txt + "<br>Kind: " + self.data.get_person_string(childID)
-            txt = txt + "<hr>"
-
-        wid.setText(txt)
