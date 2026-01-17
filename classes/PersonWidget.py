@@ -757,6 +757,8 @@ class PersonWidget(QScrollArea):
             wid.setText(text)
             wid  = self.tabParents.findChild(QLabel,"parents>father")
             wid.setText(text)
+
+            self.main.update_table_row(self.ID)
     def _onFatherCommentChanged(self, event):
         wid = self.tabParents.findChild(QTextEdit,"parents>fatherComment")
         father = self.main.get_father(self.ID)
@@ -776,6 +778,8 @@ class PersonWidget(QScrollArea):
             wid.setText(text)
             wid  = self.tabParents.findChild(QLabel,"parents>mother")
             wid.setText(text)
+
+            self.main.update_table_row(self.ID)
     def _onMotherCommentChanged(self, event):
         wid = self.tabParents.findChild(QTextEdit,"parents>motherComment")
         mother = self.main.get_mother(self.ID)

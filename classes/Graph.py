@@ -1,11 +1,11 @@
+from PyQt5.QtWebChannel       import QWebChannel
 from PyQt5.QtWidgets          import QMainWindow, QLabel, QScrollArea
 from PyQt5.QtGui              import QPainter, QBrush, QColor, QFont, QPixmap, QPalette
-from PyQt5.QtCore             import Qt, QUrl
-from PyQt5.QtGui              import *
-from PyQt5.QtCore             import *
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtCore             import Qt, QUrl, QObject, pyqtSlot, pyqtSignal
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 from PyQt5.QtWidgets          import *
 import os
+import webbrowser
 
 # classes GraphAncestor & GraphDescendant & GraphDescendantHtml & GraphList
 
@@ -390,12 +390,50 @@ class GraphDescendantHtml(QMainWindow):
 
         self.calc_coords()
         self.window = QWebEngineView()
+        self.setCentralWidget(self.window)
+
+        self.bridge = Bridge()   # to have the click-event-listener
+        self.bridge.clicked.connect(self.on_clicked)
+
+        channel = QWebChannel(self.window.page())
+        channel.registerObject("pyBridge", self.bridge)
+        self.window.page().setWebChannel(channel)
+
         html = self.get_html()
         base_dir = os.path.abspath(os.path.dirname(__file__) + os.sep + "..")
-        base_url = QUrl.fromLocalFile(base_dir + os.sep)
-        self.window.setHtml(html, base_url)        
-        self.setCentralWidget(self.window)
+        self.base_url = QUrl.fromLocalFile(base_dir + os.sep)
+        self.window.setHtml(html, self.base_url)        
         self.resize(1000, 1000)
+    @pyqtSlot(str, int, int)
+    def on_clicked(self, element_id: str, x: int, y: int):  # acting on click event (on a div with person box)
+        try:
+            if element_id.endswith('_add_child'):  # create new child
+                persID = int(element_id.split('_add_child')[0])
+                self.main.create_person()
+                childID = self.main.get_id()
+                sex = self.main.get_sex(persID)
+                if sex in ("f", "w"):
+                    self.main.set_mother(childID, persID)
+                else:
+                    self.main.set_father(childID, persID)
+                self.main.set_person(childID)
+                self.refresh_page()
+
+            elif element_id.endswith('_url'):  # navigate to url in browser
+                tmp = element_id.split('_')
+                nr = int(tmp[1])  # wievielte url soll gezeigt werden?
+                persID = int(tmp[0])
+                urls = self.main.get_url(persID)
+                if urls != "":
+                    url_list = urls.split("\n")
+                    if len(url_list) >= nr:
+                        webbrowser.open(url_list[nr-1])
+
+            else:  # show person in detail view
+                persID = int(element_id)
+                self.main.set_person(persID)
+        except: 
+            pass
     def calc_coords(self):
         # Simple approach; optimization is a later step #
         self.xMax = self.windowOffset
@@ -439,8 +477,36 @@ class GraphDescendantHtml(QMainWindow):
     def get_html(self):
         ret = "<!DOCTYPE html>\n" + \
               "<html>\n" + \
-              "<head><link rel='stylesheet' href='styles/app.css'></head>\n" + \
+              "<head>\n" + \
+              "  <meta name='viewport' content='width=device-width, initial-scale=1'>\n" + \
+              "  <script type='text/javascript' src='qrc:///qtwebchannel/qwebchannel.js'></script>\n" + \
+              "  <link rel='stylesheet' href='styles/app.css'>\n" + \
+              "</head>\n" + \
               "<body>\n" + \
+              "  <script>\n" + \
+              "  (function() {\n" + \
+              "      function initChannel() {\n" + \
+              "      new QWebChannel(qt.webChannelTransport, function(channel) {\n" + \
+              "          window.pyBridge = channel.objects.pyBridge;\n" + \
+              "          document.querySelectorAll('.clickable').forEach(function(el) {\n" + \
+              "          el.addEventListener('click', function(ev) {\n" + \
+              "              const id = el.id || '';\n" + \
+              "              const x = Math.round(ev.clientX);\n" + \
+              "              const y = Math.round(ev.clientY);\n" + \
+              "              if (window.pyBridge && window.pyBridge.onDivClicked) {\n" + \
+              "              window.pyBridge.onDivClicked(id, x, y);\n" + \
+              "              }\n" + \
+              "          }, { passive: true });\n" + \
+              "          });\n" + \
+              "      });\n" + \
+              "      }\n" + \
+              "      if (document.readyState === 'complete' || document.readyState === 'interactive') {\n" + \
+              "      initChannel();\n" + \
+              "      } else {\n" + \
+              "      document.addEventListener('DOMContentLoaded', initChannel, { once: true });\n" + \
+              "      }\n" + \
+              "  })();\n" + \
+              "  </script>\n" + \
               "  <div class='layer' style='width:'" + str(self.xMax) + "px;height:" + str(self.yMax) + "px;+'>\n"
 
         # svg begin
@@ -449,13 +515,13 @@ class GraphDescendantHtml(QMainWindow):
                     '" height="' + str(self.yMax) + '"  style="position:absolute;top:0;left:0;border:1px solid #ccc;">\n'    
 
         # scale with years (<line>)
-        ret = ret + '  <line x1="0" y1="0" x2="0" y2="' + str(round(self.yMax)) + '" stroke="black" stroke-width="1" />\n'
+        ret = ret + '  <line x1="0" y1="0" x2="0" y2="' + str(round(self.yMax)) + '" stroke="white" stroke-width="1" />\n'
         for i in range(self.minYear, self.maxYear+21):
             if i % 10 == 0:
                 y = int(round(i - self.minYear) * self.dotPerYear + self.boxOffset) 
                 ret = ret + \
-                    '  <line x1="0" y1="' + str(y) + '" x2="10" y2="' + str(y) + '" stroke="black" stroke-width="1" />\n' + \
-                    '  <text x="15" y="' + str(y+4) + '" font-size="11" fill="black">' + str(i) + '</text>\n'  # 6 = half font size
+                    '  <line x1="0" y1="' + str(y) + '" x2="10" y2="' + str(y) + '" stroke="white" stroke-width="1" />\n' + \
+                    '  <text x="15" y="' + str(y+4) + '" font-size="11" fill="white">' + str(i) + '</text>\n'  # 6 = half font size
 
         # Lines between boxes #
         for line in self.lines: 
@@ -465,20 +531,21 @@ class GraphDescendantHtml(QMainWindow):
             person2 = self.ids[box2]
 
             if self.rechtwinklig:
+                a = 5  # depends on padding
                 ret = ret + \
-                    '<line x1="' + str(round(person2["x"] + self.boxWidth/2)) + \
+                    '<line x1="' + str(round(person2["x"] + self.boxWidth/2) + a) + \
                         '" y1="' + str(round(person2["y"] + self.minHeight + 10)) + \
-                        '" x2="' + str(round(person2["x"] + self.boxWidth/2)) + \
+                        '" x2="' + str(round(person2["x"] + self.boxWidth/2) + a) + \
                         '" y2="' + str(round(person2["y"] + self.minHeight + 30)) + \
                         '" stroke="black" stroke-width="1" />' + \
-                    '<line x1="' + str(round(person2["x"] + self.boxWidth/2)) + \
+                    '<line x1="' + str(round(person2["x"] + self.boxWidth/2) + a) + \
                         '" y1="' + str(round(person2["y"] + self.minHeight + 30)) + \
-                        '" x2="' + str(round(person1["x"] + self.boxWidth/2)) + \
+                        '" x2="' + str(round(person1["x"] + self.boxWidth/2) + a) + \
                         '" y2="' + str(round(person2["y"] + self.minHeight + 30)) + \
                         '" stroke="black" stroke-width="1" />' + \
-                    '<line x1="' + str(round(person1["x"] + self.boxWidth/2)) + \
+                    '<line x1="' + str(round(person1["x"] + self.boxWidth/2) + a) + \
                         '" y1="' + str(round(person2["y"] + self.minHeight + 30)) + \
-                        '" x2="' + str(round(person1["x"] + self.boxWidth/2)) + \
+                        '" x2="' + str(round(person1["x"] + self.boxWidth/2) + a) + \
                         '" y2="' + str(round(person1["y"])) + \
                         '" stroke="black" stroke-width="1" />'
             else:
@@ -491,23 +558,58 @@ class GraphDescendantHtml(QMainWindow):
                 
         ret = ret + '</svg>'
 
-        # boxes with person data (<div>) #
+        # boxes with person data (<div>) and plus-icon for new children #
         for key in self.ids:
             person = self.ids[key]
             if person["SEX"] == 'm':
-                sex_class = 'man'
+                sex_class = 'man '
             elif person["SEX"] in ('f', 'w'):
-                sex_class = 'woman'
-            ret = ret + "\n<div class='box " + sex_class + "' style='top: " + str(person["y"])  + \
-                  "px; left: " + str(person["x"]) + "px;'><b>" + \
-                           person["GIVN"] + \
-                  "<br>" + person["SURN"] + \
-                  "</b><br>" + person["birth"] + \
-                  "<br>" + person["death"] + \
+                sex_class = 'woman '
+            
+            if person["finished"] == 'X':
+                finished_class = "solid "
+            else:
+                finished_class = "dotted "
+
+            ret = ret + "\n" + \
+                  "<div class='box' style='top: " + str(person["y"]) + "px; left: " + str(person["x"]) + "px;'>\n" + \
+                  "  <div id='" + str(person["id"]) + "' class='box_inner clickable " + sex_class + finished_class + "'>\n" + \
+                  "    <b>"  + person["GIVN"] + \
+                  "    <br>" + person["SURN"] + "</b>" + \
+                  "    <br>" + person["birth"] + \
+                  "    <br>" + person["death"] + \
+                  "  </div>\n" + \
+                  "  <div id='" + str(person["id"]) + "_add_child' class='clickable' style='position:relative;top:-3px;'>" + \
+                  "    <img src='icons/cross.png'>\n" + \
+                  "  </div>\n" + \
                   "</div>\n"
+
+            # persID to box (upper right corner outside of box)
+            ret = ret + "\n<div style='position:absolute;top:" + str(round(person["y"] -13)) + \
+                        "px; left:" + str(round(person["x"] + self.boxWidth) + 8) + "px;'>" + \
+                    "  " + str(person["id"]) + "\n</div>\n"
+
+            # globe-icon for external websites
+            if person["url"] != "":
+                cnt = 0
+                urls = person["url"].split("\n")
+                for url in urls:
+                    ret = ret + "\n<div id='" + str(person["id"]) + "_" + str(cnt+1) + "_url' class='clickable' style='position:absolute;top:" + \
+                        str(round(person["y"] + cnt * 18 + 2))  + \
+                        "px; left:" + str(round(person["x"] + self.boxWidth) + 15) + "px;'>" + \
+                    "  <img src='icons/world2.png'>\n</div>\n"
+                    cnt = cnt + 1
             
         ret = ret + "\n  </div>\n</body>\n</html>"
         return ret
+    def refresh_page(self):
+        for key in self.ids:
+            root = self.ids[key]["id"]
+            break
+        self.ids, self.lines, self.minYear, self.maxYear = self.main.get_descendants(root)
+        self.calc_coords()
+        new_html = self.get_html()
+        self.window.setHtml(new_html, self.base_url)
 
 
 class GraphList():
@@ -542,3 +644,11 @@ class GraphList():
         for graph in self.list:
             graph.close()
             self.list.remove(graph)
+
+
+
+class Bridge(QObject):
+    clicked = pyqtSignal(str, int, int)  # id, x, y
+    @pyqtSlot(str, int, int)
+    def onDivClicked(self, element_id: str, x: int, y: int):  # Called from JavaScript
+        self.clicked.emit(element_id, x, y)  # calls GraphDescendantHtml=>on_clicked

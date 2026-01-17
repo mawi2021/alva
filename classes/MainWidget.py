@@ -82,7 +82,7 @@ class MainWindowMenu(QMenuBar):
         fileMenu.addAction(self.newProjectAction)
 
         self.openProjectAction = QAction(QIcon("icons/openproject2.png"), "Öffnen", self)
-        self.openProjectAction.triggered.connect(parent.open_project)
+        self.openProjectAction.triggered.connect(parent.select_project)
         fileMenu.addAction(self.openProjectAction)
 
         fileMenu.addSeparator()
@@ -122,7 +122,6 @@ class MainWindowMenu(QMenuBar):
         self.anz_pers_Action = QAction(QIcon("icons/personen.png"), "Anzahl Personen", self)
         self.anz_pers_Action.triggered.connect(parent.statistik_person)
         statistikMenu.addAction(self.anz_pers_Action)
-
 
 
 class MainWindowToolbars():

@@ -103,11 +103,11 @@ class TableWidget(QWidget):
     def initUI(self):
         self.table.setRowCount(0)
         
-        fields = self.main.get_conf_table_fields()
+        fields = self.main.get_table_field_texts()
         self.table.setColumnCount(len(fields))
         cnt = 0
         for obj in fields:
-            headerItem = QTableWidgetItem(fields[obj])
+            headerItem = QTableWidgetItem(obj)
             self.table.setHorizontalHeaderItem(cnt,headerItem)
             cnt += 1
             
