@@ -18,7 +18,6 @@ from classes.Data               import Data
 #   pip install -r requirements.txt
 
 # ALLGEMEIN
-# - Nach Zuordnung Elternteil erfolgt kein Refresh der Zelle in der Tabelle
 # - Datumsangaben in convert_date_to_hr => else-Zweig verbesssern
 # - Block für weitere Familie erstellen - nötig(?)
 # - Löschen einer Ehe (fehlt)
@@ -43,6 +42,7 @@ from classes.Data               import Data
 # - bei Datenänderung der Person ändert sich die blaue Zeile oberhalb der Personendetails nicht
 # - Konfigurationen in der Datenbank ablegen, gg. mehrere verschiedene Konfigurationen, so dass man 
 #   Einstellungen schnell und einfach wechseln kann
+# - Maximales Level der angezeigten Personen im Vorfahren-/Nachfahren-Graph
 # Graphen
 # - klickbar Person
 # - klickbar URL(s)
@@ -138,6 +138,8 @@ class Main(QMainWindow):
         self.data.exportData()
     def fill_table(self, data):
         self.tableWidget.fill_table(data)
+    def get_ancestors(self):
+        return self.data.get_ancestors(self.detailWidget.get_ID())
     def get_birth_full(self, persID):
         if persID in (0, -1): 
             return ""
@@ -145,6 +147,8 @@ class Main(QMainWindow):
         dat = person["BIRT_DATE"]
         plc = person["BIRT_PLAC"]
         return self.get_date_line(dat, plc, "*")
+    def get_children(self, persID):
+        return self.data.get_children(persID)
     def get_date_line(self, date, place, sign):
         dat = self.convert_date_to_hr(date)
         if dat == "" and place == "":
@@ -161,10 +165,8 @@ class Main(QMainWindow):
         dat = person["DEAT_DATE"]
         plc = person["DEAT_PLAC"]
         return self.get_date_line(dat, plc, "†")
-    def get_children(self, persID):
-        return self.data.get_children(persID)
-    def get_descendants(self, persID):
-        return self.data.get_descendants(persID)
+    def get_descendants(self):
+        return self.data.get_descendants(self.detailWidget.get_ID())
     def get_family_as_adult(self, persID):
         return self.data.get_family_as_adult(persID)
     def get_family_ids_as_adult(self, persID):
@@ -238,11 +240,11 @@ class Main(QMainWindow):
         self.data.on_exit()
         self.conf.on_exit()
     def open_graph_ancestors(self):
-        anc_list, line_list, min_year, max_year = self.data.get_ancestors(self.detailWidget.ID)
-        graph = self.graphList.add_graph_ancestor(anc_list, line_list, min_year, max_year)
+        anc_list, line_list, min_year, max_year = self.get_ancestors()
+        graph = self.graphList.add_graph_ancestor_html(anc_list, line_list, min_year, max_year)
         graph.show()
     def open_graph_descendants(self):
-        anc_list, line_list, min_year, max_year = self.get_descendants(self.detailWidget.ID)
+        anc_list, line_list, min_year, max_year = self.get_descendants()
         graph = self.graphList.add_graph_descendant_html(anc_list, line_list, min_year, max_year)
         graph.show() 
     def resize_table_columns(self):
@@ -345,3 +347,5 @@ if __name__ == "__main__":
 # - Scrollbar fehlt
 # - Skalierung nicht lang genug
 # - Striche Auswahl direkte oder waagerechte und senkrechte Verbindung
+# - Nach Zuordnung Elternteil erfolgt kein Refresh der Zelle in der Tabelle
+# - Config als Datenbank statt json Datei

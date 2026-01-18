@@ -13,6 +13,8 @@ class Data():
         self.conn_config   = None
         self.cursor_config = None
         self.base_dir      = os.path.dirname(__file__) + os.sep + ".." + os.sep
+        self.project_dir   = self.base_dir + "data"
+        self.config_dir    = self.base_dir + "config"
         self.project       = None
         self.indi_columns = [   ["id",          "INTEGER PRIMARY key"],
                                 ["GIVN",        "TEXT"],
@@ -96,7 +98,7 @@ class Data():
         self.project = self.get_project() 
     def init_project(self):
         if self.project in (None, ""):
-            self.select_project()
+            self.set_empty_project()
         else:
             self.set_project(self.project)
     def check_db_structure(self):
@@ -336,24 +338,34 @@ class Data():
         return self.cursor.lastrowid
     def create_person(self, persID = -1):
         if persID == -1:
-            self.cursor.execute("INSERT INTO INDI DEFAULT VALUES")
+            self.cursor.execute("SELECT id FROM INDI ORDER BY id")  # search for next ID-hole
+            cnt = 0
+            found = False
+            for row in self.cursor.fetchall():
+                cnt = cnt + 1
+                if row[0] != cnt:
+                    self.cursor.execute("INSERT INTO INDI (id) VALUES (" + str(cnt) + ")")
+                    found = True
+                    break
+            if not found:
+                self.cursor.execute("INSERT INTO INDI DEFAULT VALUES")
         else:
             self.cursor.execute("INSERT INTO INDI (id) VALUES (" + str(persID) + ")")
         self.conn.commit() 
         return self.cursor.lastrowid
     def create_project(self):
-        if not os.path.exists(self.configData["projectDir"]):
-            os.makedirs(self.configData["projectDir"])
+        if not os.path.exists(self.project_dir):
+            os.makedirs(self.project_dir)
 
         projectName, ok = QInputDialog.getText(self.main, \
                                             'Projektname', \
-                                            'Bitte geben Sie einen neuen Projektnamen an:' \
+                                            'Bitte geben Sie einen Projektnamen an:' \
                                             )
 
         while True:
             if not ok: return None
 
-            fileName = self.configData["projectDir"] + "/" + projectName + ".db"
+            fileName = self.project_dir + os.sep + projectName + ".db"
 
             if os.path.isfile(fileName): 
                 txt = "Das Projekt " + projectName + \
@@ -368,7 +380,7 @@ class Data():
                 break
 
         self.main.clear_widgets()
-        self.configData["currProject"] = projectName
+        self.project = projectName
         self.main.setWindowTitle("Alva - " + projectName)  
 
         # Create database file and create tables #
@@ -447,14 +459,16 @@ class Data():
             list.append(row[0])
         return list
     def get_conf_attribute(self, config_name, property):
-        query = "SELECT value FROM CONF WHERE config_name = '" + config_name + "' AND property = '" + property + "'"
-        self.cursor_config.execute(query)
-        for row in self.cursor_config.fetchall():
-            return row[0]
+        if config_name:
+            query = "SELECT value FROM CONF WHERE config_name = '" + config_name + "' AND property = '" + property + "'"
+            self.cursor_config.execute(query)
+            for row in self.cursor_config.fetchall():
+                return row[0]
         
-        if config_name == self.project and config_name != "global" and property == "table_columns":
+        if config_name in (self.project, None) and config_name != "global" and property == "table_columns":
             fields = self.get_conf_attribute("global", "table_columns")
-            self.set_conf_attribute(self.project, "table_columns", fields)
+            if self.project != None:
+                self.set_conf_attribute(self.project, "table_columns", fields)
             return fields
 
         return None
@@ -519,6 +533,9 @@ class Data():
 
         return (ids, lines, min_year, max_year)
     def get_fam_attribute(self, famID, attribute):
+        if not self.cursor:
+            return []
+        
         self.cursor.execute("SELECT " + attribute + " FROM FAM WHERE id = " + str(famID))
         value = ""
         for row in self.cursor.fetchall():
@@ -532,12 +549,18 @@ class Data():
             break
         return value
     def get_family_ids_as_adult(self, persID):
+        if not self.cursor:
+            return []
+        
         self.cursor.execute("SELECT id FROM FAM WHERE HUSB = " + str(persID) + " OR WIFE = " + str(persID) + " ORDER BY id ASC")
         famIDs = []
         for row in self.cursor.fetchall():
             famIDs.append(row[0])
         return famIDs
     def get_family_as_adult(self, persID):
+        if not self.cursor:
+            return []
+        
         self.cursor.execute("SELECT * FROM FAM WHERE HUSB = " + str(persID) + " OR WIFE = " + str(persID))
         fam_rows = []
         for row in self.cursor.fetchall():
@@ -754,7 +777,7 @@ class Data():
             return
 
         # ----- Create new project ----- #
-        if self.configData["currProject"] != "":
+        if self.project not in (None, ""):
             self.main.widget.clear_widgets()
         self.create_project()
         
@@ -794,22 +817,24 @@ class Data():
     def select_project(self):                            # asks for project from list of existing projects
         # Search for files in "data" subdirectory
         items = []
-        files = os.listdir(self.base_dir + "data")
+        data_dir = self.base_dir + "data"
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+
+        files = os.listdir(data_dir)
         for file in files:
             if file.endswith(".db"):
                 items.append(file.removesuffix(".db"))
 
+        ok = False
         if len(items) == 0:
             project = self.create_project()
+            ok = True
         else:
             project, ok = QInputDialog.getItem(self.main, "Auswahl des Projektes", \
                 "Projekte", items, 0, False)
 
-        if not ok or not project:
-            print("  Auswahl abgebrochen")
-        elif not project:
-            print("Kein Projekt ausgewählt")
-        else:
+        if ok and project:
             self.set_project(project)
     def set_conf_attribute(self, config_name, property, value):
         query = "UPDATE CONF SET value = '" + value + "' WHERE config_name = '" \
@@ -822,6 +847,14 @@ class Data():
                   + config_name + "', '" + property + "', '" + value + "')"
             self.cursor_config.execute(query)
             self.conn_config.commit()
+    def set_empty_project(self):
+        self.set_conf_attribute("global", "project", "")
+        self.project = None
+        self.conn    = None
+        self.cursor  = None    
+        self.main.setWindowTitle('Alva (Kein Projekt geöffnet)')  
+        self.main.widget.closeGraphs()  # In case, graphs are open, windows are closed
+        self.main.clear_widgets()  # Empty other Widgets
     def set_fam_attribute(self, famID, attribute, value):
         if famID == -1:
             return
@@ -867,8 +900,7 @@ class Data():
         self.cursor = self.conn.cursor()
         self.check_db_structure()
     
-        self.main.setWindowTitle('Alva -> Stammbaum "' + project_name + '"')  
-        self.set_conf_attribute("global", "project", project_name)
+        self.main.setWindowTitle('Alva -> Projekt "' + project_name + '"')  
 
         # In case, graphs are open, windows are closed
         self.main.widget.closeGraphs()
@@ -1133,7 +1165,7 @@ class Data():
         print("Start Lesen der Daten aus der Excel-Datei")
         
         # Initialize File
-        f = open(self.configData["currProjectFile"], 'w', encoding='utf8')
+        f = open(self.project, 'w', encoding='utf8')
         f.write("{\n\"INDI\":\n[\n")
         f.close()
 
@@ -1249,7 +1281,7 @@ class Data():
             # :TODO: "Verwandt", "Baum"
             
             # Write Data to File
-            f = open(self.configData["currProjectFile"], 'a', encoding='utf8')
+            f = open(self.config_dir, 'a', encoding='utf8')
             if first:
                 first = False
             else:
@@ -1260,7 +1292,7 @@ class Data():
         print("Ende Verarbeitung Personen, Beginn Speicherung als json-Datei")
 
         # Close INDI Brackets, open FAM Brackets
-        f = open(self.configData["currProjectFile"], 'a', encoding='utf8')
+        f = open(self.config_dir, 'a', encoding='utf8')
         f.write("\n],\n\"FAM\":\n[\n")
         f.close()
         
@@ -1424,7 +1456,7 @@ class Data():
                 else:
                     obj["CHIL"].append(str(df["Geschw12"]._values[i]))
                         
-            f = open(self.configData["currProjectFile"], 'a', encoding='utf8')
+            f = open(self.project, 'a', encoding='utf8')
             if first:
                 first = False
             else:
@@ -1433,7 +1465,7 @@ class Data():
             f.close()
             
         # Close FAM Brackets
-        f = open(self.configData["currProjectFile"], 'a', encoding='utf8')
+        f = open(self.config_dir, 'a', encoding='utf8')
         f.write("\n]\n}")
         f.close()
 
@@ -1454,7 +1486,7 @@ class Data():
         f.close()
         
         # Start with empty file #
-        f = open(self.configData["currProjectFile"], 'w', encoding='utf8')
+        f = open(..., 'w', encoding='utf8')
         f.close()
 
         cnt = 0
@@ -1494,7 +1526,7 @@ class Data():
                     break
     
                 # braces, colons, new lines and indentation - magic ;o)
-                f = open(self.configData["currProjectFile"], 'a', encoding='utf8')
+                f = open(..., 'a', encoding='utf8')
                 if not firstPrint:
                     if lastkey0 != newkey:
                         f.write("\n    ],\n    \"" + newkey + "\":\n    [\n")
@@ -1515,7 +1547,7 @@ class Data():
 
         # Once again after finishing the loop
         obj = self._runRecursion(tab)
-        f = open(self.configData["currProjectFile"], 'a', encoding='utf8')
+        f = open(..., 'a', encoding='utf8')
         
         # braces, colons, new lines and indentation - magic ;o)
         for newkey in obj.keys(): break
@@ -1743,6 +1775,6 @@ class Data():
                             obj["FAMS"] = [fam["id"]]
                         break
             
-        f = open(self.configData["currProjectFile"], 'w', encoding='utf8')
+        f = open(..., 'w', encoding='utf8')
         json.dump(jData, f, indent=4, ensure_ascii=False)
         f.close()
