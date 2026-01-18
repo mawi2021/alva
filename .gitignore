@@ -1,11 +1,9 @@
-gedcom-551-deutsch.pdf
-MyImport*/*
+.archive/*
+.git/*
+.venv/*
+.vscode/*
+classes/__pycache__/*
 data/*
-.vscode
-__pycache__
-config.txt
-icons/Malen
-pip.exe*
-classes/DB.py.old
+icons/*.xcf
 logs/*
 .gitignore
