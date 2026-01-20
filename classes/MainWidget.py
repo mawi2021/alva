@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QFrame, QHBoxLayout, QSplitter, QAction
+from PyQt5.QtWidgets import QWidget, QFrame, QHBoxLayout, QSplitter, QAction, QVBoxLayout, QTextEdit
 from PyQt5.QtCore         import Qt, QSize
 from PyQt5.QtGui          import QIcon
 from PyQt5.QtWidgets      import QToolBar, QAction, QMenuBar
@@ -39,6 +39,11 @@ class MainWidget(QWidget):
         mainSplitter.addWidget(self.persFrame)
         mainSplitter.setSizes([800,800])
 
+        self.status_ta = QTextEdit()     
+        self.status_ta.setText("")
+        statusLayout = QVBoxLayout(statusFrame)
+        statusLayout.addWidget(self.status_ta)
+
         statusSplitter = QSplitter(Qt.Vertical)
         statusSplitter.addWidget(mainSplitter)
         statusSplitter.addWidget(statusFrame)
@@ -62,6 +67,8 @@ class MainWidget(QWidget):
     def setPersonNoGraph(self, id):
         self.tableW.set_person(id)
         self.persFrame.set_person(id)
+    def add_status_message(self, message):
+        self.status_ta.append(message)
     def clear_widgets(self):
         self.tableW.clear_table()
         self.persFrame.set_person(-1)
@@ -92,7 +99,7 @@ class MainWindowMenu(QMenuBar):
         fileMenu.addAction(self.importAction)
 
         self.exportAction = QAction(QIcon("icons/export2.png"), "Export", self)
-        self.exportAction.triggered.connect(parent.export)
+        self.exportAction.triggered.connect(parent.export_action)
         fileMenu.addAction(self.exportAction)
 
         fileMenu.addSeparator()
@@ -177,11 +184,11 @@ class MainWindowToolbars():
         elif name == "Statistik":  
             self.detailToolBar.addAction(self.parent.menu.anz_pers_Action)
     def switch_to_file_menu(self):
-        print( "switch_to_file_menu" )  # called from MainWindowToolbars
+        self.parent.add_status_message( "switch_to_file_menu" )  # called from MainWindowToolbars
         self.switchDetailToolbar("Nav")
     def switch_to_person_menu(self):
-        print( "switch_to_person_menu" )  # called from MainWindowToolbars
+        self.parent.add_status_message( "switch_to_person_menu" )  # called from MainWindowToolbars
         self.switchDetailToolbar("Person")        
     def switch_to_statistik_menu(self):
-        print( "switch_to_person_menu" )  # called from MainWindowToolbars
+        self.parent.add_status_message( "switch_to_person_menu" )  # called from MainWindowToolbars
         self.switchDetailToolbar("Statistik")    

@@ -17,41 +17,66 @@ from classes.Data               import Data
 #   .venv\Scripts\Activate.ps1
 #   pip install -r requirements.txt
 
-# ALLGEMEIN
-# - Datumsangaben in convert_date_to_hr => else-Zweig verbesssern
-# - Block für weitere Familie erstellen - nötig(?)
-# - Löschen einer Ehe (fehlt)
-# - Shortcuts
-# - alle Farben und Texte (=> Konstanten) in allen Klassen auslagern in Konfiguration
-# - combine projects (neu)
-# - Menüpunkt mit Checks => Alter Personen < 110; Mutter < 60 bei Geburt der Kinder
-# - Menüpunkt mit Statistik
-# - PersonWidget muss einen Scrollbalken bekommen und dafür dürfen die Widgets nicht resizable 
-#   sein; evtl. liegt das an den GroupBox-Widgets => kann umgebaut werden zu Labeln mit fixer 
-#   und gleicher Breite, dann hat man den gleichen Formular-Eindruck
-# - StatusWidget anklemmen und dort Nachrichten ausgeben
-# - Checks: Personen mit Info, zu welchen Stammbäumen sie ghören, also ob sie mit den anderen Personen 
-#   irgendwie verbunden sind, um zu sehen, wer "Karteileichen" sind
-# - In Personendetails: Cosima fehlt auf erstem Tab bei mir (Partner und Kinder scheinbar nur bei Ehe gefüllt)
-# - mehrere familien und kinder / partner => prüfen, ggf. gehen änderungen nur auf 1. familie
-# - self.main.widget in Data auflösen
-# - für weitere Feature-Ideen andere Software anschauen, z.B. https://www.youtube.com/watch?v=gjeM32tkcFA
-# - ged-Dateien einlesen und ausgeben
-# - Ereignisse im Leben einer Person in neuer Tabelle
-# - Bilderreferenzen auf Ereignisse (und nicht nur auf Person)
-# - bei Datenänderung der Person ändert sich die blaue Zeile oberhalb der Personendetails nicht
-# - Konfigurationen in der Datenbank ablegen, gg. mehrere verschiedene Konfigurationen, so dass man 
-#   Einstellungen schnell und einfach wechseln kann
-# - Maximales Level der angezeigten Personen im Vorfahren-/Nachfahren-Graph
-# Graphen
-# - klickbar Person
-# - klickbar URL(s)
-# - Farben selbst konfigurieren
-# - Wenn Datum geschätzt, dann Angabe um <jahr> statt am <datum>
-# - Nachfahren wieder mit Ehe-Block unter der Person
-# - IDs ein-/ausblenden
-# - Vorfahren als html (analog Nachfahren)
-# - Dreieck hoch und runter als Navigation mit dieser Person und Anzeige Vorfahren und Nachfahren
+# ALLGEMEIN:
+# ==========
+# Next: Konfiguration: Alle Texte in TEXT Tabelle (DE)
+# Next: PersonWidget: muss einen Scrollbalken bekommen und dafür dürfen die Widgets nicht resizable sein
+
+# - Fehler: bei Datenänderung der Person ändert sich die blaue Zeile oberhalb der Personendetails nicht
+# - Fehler: Datumsangaben in convert_date_to_hr => else-Zweig verbesssern; bzw. alles, was mit Datum und 
+#     Interpretieren der Jahreszahl für das Malen der Stammbäume 
+# - Fehler: Überschreiben von Feldern bei Sortierung und Datenänderung
+# - Fehler?: mehrere Familien und Kinder / partner => prüfen, ggf. gehen änderungen nur auf 1. familie
+# - Fehler?: Block für weitere Familie erstellen
+# - Fehler: Darstellung Baum alva aus Sicht der Kinder
+
+# - Konfiguration: Alle festen Werte, Texte, Farben, etc. in config-DB
+# - Konfiguration: Konfigurationsauswahl
+# - Konfiguration: Mehrere Konfigurationen; nicht abhängig vom geladenen Projekt
+# - Konfiguration: Maximales Level der angezeigten Personen im Vorfahren-/Nachfahren-Graph
+# - Konfiguration: Möglichkeiten der Konfiguration immer dort, wo sie wirken, also als kleine Zahnräder
+#     plus eine Stelle für alle diese Teil-Konfigurationen
+
+# - PersonWidget: Statt Buttons Vor-/Nachfahren eine Popdown-Liste aller verfügbaren Arten, Bäume zu malen
+#     sein; evtl. liegt das an den GroupBox-Widgets => kann umgebaut werden zu Labeln mit fixer 
+#     und gleicher Breite, dann hat man den gleichen Formular-Eindruck
+
+# - Graph: Texte => Wenn Datum geschätzt, dann Angabe "um <jahr>" statt "am <datum>"
+# - Graph: Nachfahren wieder mit Ehe-Block / anderem Kindeselternteil unter der Person
+# - Graph: IDs, Globus, Vor-/Nachfahren ein-/ausblenden
+# - Graph: als pure HTML Seite speichern ("Screenshot")
+# - Graph: Anzeige der anderen Kinderelternteile in Personendetails
+# - Graph: Nachfahren - Start für Linie nach unten muss der gleiche Punkt wie für "+" sein 
+#     (dynamische Höhe der Box), von dort 30(?) Pixel lange Strich nach unten oder Beginn
+#     der schrägen Linie
+# - Graph: Kinder nach Alter sortieren
+
+# - Feature: Ausgabe "grafisch" als Text, A4 (ggf. mit LaTeX?)
+# - Feature: Checks: Personen mit Info, zu welchen Stammbäumen sie ghören, also ob sie mit den 
+#     anderen Personen irgendwie verbunden sind, um zu sehen, wer "Karteileichen" sind
+# - Feature: Check, ob Geburtsjahr stimmen kann, wenn Abstand zu Eltern / Kindern zu groß oder negativ
+# - Feature: Sinnvolle Shortcuts
+# - Feature: Konvertierung vorhandener Dateien und Einlesen
+#   + ged-Dateien
+#   + XLS mit beliebigem Mapping
+# - Feature: Konvertierung der SQLite Daten nach ged und ggf. anderen Formaten
+# - Feature: Löschen (Ehe)
+# - Feature: Ereignisse im Leben einer Person in neuer Tabelle
+# - Feature: Bilderreferenzen auf Ereignisse (und nicht nur auf Person)
+# - Feature: combine projects (neu)
+# - Feature: Menüpunkt mit Checks => Alter Personen < 110; Mutter < 60 bei Geburt der Kinder (bzw. konfigurierbar)
+# - Feature: Menüpunkt mit Statistik
+# - Feature: wie kann man gemeinsam an Daten arbeiten? File Sharing und Versionierung? Vergleich 
+#     von Dateien a la kdiff
+# - Feature: Signatur der exe, um Ausführung zu sichern
+# - Feature: Version für Linux möglich?
+# - Feature: Import- und Export-Konvertierungen so auslagern, dass man sich selbst was schreiben kann
+# - Feature: eigene Datenbankfelder hinzufügbar, nutzbar, angezeigt, editierbar ("custom fields")
+# - Feature: Kundeneigene Felder >> In Tabellendefinition (INDI + FAM), wie eingeben?, in TabellenWidget
+#     zeigen als separater Tab mit Controls entsprechend Definition des Feldes
+# - Feature: eine PersonID zu einer anderen ID ändern und alle Abhängigkeiten mit betrachten
+
+# - Documentation: write and keep up-to-date => https://alva.ur-ahn.de/
 
 class Main(QMainWindow):
     # Constraints:
@@ -83,8 +108,12 @@ class Main(QMainWindow):
 
         QApplication.setCursorFlashTime(0)  # 0 = no cursor blinking in all widgets
         self.data.init_project()
+    def add_status_message(self, message):
+        self.widget.add_status_message(message)
     def clear_widgets(self):
         self.widget.clear_widgets()
+    def close_graphs(self):
+        self.widget.closeGraphs()
     def copy_person(self):
         currID = self.detailWidget.get_ID()              # Current line in table is selected line => get ID
         newID  = self.data.copy_person(currID)           # Get new ID 
@@ -105,7 +134,7 @@ class Main(QMainWindow):
         self.tableWidget.add_person(persID)  # Add Person in PersonList 
         self.widget.set_person(persID)       # Set the new (empty) person having Focus 
     def create_project(self):
-        print( "create_project" )
+        self.widget.add_status_message("create_project")
         self.data.create_project()
         self.set_person(-1)
     def delete_father(self, persID):
@@ -120,12 +149,12 @@ class Main(QMainWindow):
         currID = self.detailWidget.get_ID()              # Current line in table is selected line => get ID
         qm = QMessageBox()                               # Dialog to ask, if really delete
         qm.setWindowTitle("Löschen")
-        qm.setText("Sind Sie sicher, dass die Person mit ID " + str(currID) + " gelöscht werden soll?")
+        qm.setText(self.data.get_text("SURE_1") + str(currID) + self.data.get_text("SURE_2"))
         qm.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
         btnYes    = qm.button(QMessageBox.Yes)
         btnNo     = qm.button(QMessageBox.No)
-        btnYes.setText("Ja")
-        btnNo.setText("Nein")
+        btnYes.setText(self.data.get_text("YES"))
+        btnNo.setText(self.data.get_text("NO"))
         qm.exec_()
         if qm.clickedButton() == btnYes:
             self.tableWidget.delete_person(currID)       # delete line in Table
@@ -133,9 +162,8 @@ class Main(QMainWindow):
             newID = self.tableWidget.get_selected_pers()
             self.detailWidget.set_person(newID)          # show first person in Details
             self.tableWidget.select_persID(newID)        # select first person in Table
-    def export(self):
-        print( "export" )  # called from MainWindowMenu
-        self.data.exportData()
+    def export_action(self):
+        self.widget.add_status_message("export - not yet implemented")
     def fill_table(self, data):
         self.tableWidget.fill_table(data)
     def get_ancestors(self):
@@ -231,12 +259,12 @@ class Main(QMainWindow):
     def get_url(self, persID):
         return self.data.get_indi_attribute(persID, "url")
     def import_action(self):
-        print( "import_action" )  # called from MainWindowMenu
+        self.widget.add_status_message("import_action")
         self.data.import_data()
     def is_field_in_table(self, fieldname):
         return self.data.get_table_col_number(fieldname) != -1
     def on_exit(self):
-        print( "onExit" )  # called from MainWindowMenu
+        self.widget.add_status_message("on_exit")
         self.data.on_exit()
         self.conf.on_exit()
     def open_graph_ancestors(self):
@@ -330,8 +358,8 @@ if __name__ == "__main__":
     main()
 
 
-# ----- FEATURES ----- #
-# - Ctrl + S >> Speichern
+# ----- Realized >> Ready to be documented ----- #
+# - Speichern sofort auf DB
 # - ID numerisch und zentriert
 # - In Tabelle Farben für Männlich / weiblich in ID-Zelle
 # - Umbau @Ixxx@ + @Fxxx@ => numerische ID xxx
@@ -349,3 +377,50 @@ if __name__ == "__main__":
 # - Striche Auswahl direkte oder waagerechte und senkrechte Verbindung
 # - Nach Zuordnung Elternteil erfolgt kein Refresh der Zelle in der Tabelle
 # - Config als Datenbank statt json Datei
+# - klickbar Person
+# - klickbar URL(s)
+# - Pfeil hoch und runter als Navigation mit dieser Person und Anzeige Vorfahren und Nachfahren
+# - Konfigurationen in der Datenbank ablegen, gg. mehrere verschiedene Konfigurationen, so dass man 
+#   Einstellungen schnell und einfach wechseln kann
+# - Numerierung beachtet "Löcher"
+# - Hintergrundbild für gesamten Baum (verzerrt)
+# - StatusWidget: anklemmen und dort alle Nachrichten ausgeben (alle print() ersetzt)
+
+
+# - Genealogie-Software (nach Nutzung im Genealogie-Projekt [Häufigkeit 2025])
+#   + Ahnenblatt (297 x) +48  https://www.youtube.com/watch?v=gjeM32tkcFA - kommerziell
+#   + GenPlus (237 x) -1
+#   + Ages! (100 x) +2
+#   + GESW (88 x) +8
+#   + GEN_DO! (79 x) +1
+#   + PAF (71 x) +6
+#   + Family Tree Maker (FTM) (66 x) +4
+#   + AHN-DATA (47 x) -3
+#   + Legacy (45 x) -1
+#   + Gramps (41 x) +1
+#   + Webtrees (37 x) +2
+#   + MacFamilyTree (28 x) +6
+#   + PRO-GEN (24 x) -5
+#   + Heredis (22 x) +6
+#   + GFAhnen (20 x) + 2
+#   + GENprofi (18 x) ±0
+#   + AncestQuest (17 x) +1
+#   + MyHeritage (15 x) +1
+#   + GenDat (15 x) ±0
+#   + TNG (14 x) +1
+#   + PC-Ahnen (12 x) -1
+#   + GedTool (7 x) ±0
+#   + Brothers Keeper (6 x) -1
+#   + Ahnen-Chronik (5 x) ±0
+#   + Ancestry (4 x) +1
+#   + Familienbande (4 x) +1
+#   + Ahnenwin (4 x) ±0
+#   + PARENTELE (3 x) ±0
+#   + Reunion (3 x) ±0
+#   + CFTREE (2 x) ±0
+#   + VERWANDT (2 x) ±0
+#   + Family Echo (1 x) +1
+#   + Omega (1 x) +1
+#   + AHNIX (1 x) ±0
+#   + Radix (1 x) ±0
+#   + TMG (1 x) ±0
