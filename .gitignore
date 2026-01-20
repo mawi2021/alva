@@ -3,6 +3,7 @@
 .venv/*
 .vscode/*
 classes/__pycache__/*
+config/*
 data/*
 icons/*.xcf
 logs/*
