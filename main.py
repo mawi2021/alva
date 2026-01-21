@@ -19,7 +19,8 @@ from classes.Data               import Data
 
 # ALLGEMEIN:
 # ==========
-# Next: Konfiguration: Alle Texte in TEXT Tabelle (DE)
+# Next: Konfiguration: Alle Texte in i18n Ordner in jeweiliger Sprache und nach Wahl der
+#     Sprache bzw. nach Programmstart auch in Tabelle TEXT. Default ist "de"
 # Next: PersonWidget: muss einen Scrollbalken bekommen und dafür dürfen die Widgets nicht resizable sein
 
 # - Fehler: bei Datenänderung der Person ändert sich die blaue Zeile oberhalb der Personendetails nicht
@@ -36,6 +37,8 @@ from classes.Data               import Data
 # - Konfiguration: Maximales Level der angezeigten Personen im Vorfahren-/Nachfahren-Graph
 # - Konfiguration: Möglichkeiten der Konfiguration immer dort, wo sie wirken, also als kleine Zahnräder
 #     plus eine Stelle für alle diese Teil-Konfigurationen
+# - Konfiguration: eine Mechanik einbauen, anhand derer geprüft wird, ob die Text-DB neu aufgebaut 
+#     werden muss, z.B. Speichern des letzten Einlesens und dann Vergleich mit i18n-Datei-Änderungszeit
 
 # - PersonWidget: Statt Buttons Vor-/Nachfahren eine Popdown-Liste aller verfügbaren Arten, Bäume zu malen
 #     sein; evtl. liegt das an den GroupBox-Widgets => kann umgebaut werden zu Labeln mit fixer 
@@ -163,7 +166,7 @@ class Main(QMainWindow):
             self.detailWidget.set_person(newID)          # show first person in Details
             self.tableWidget.select_persID(newID)        # select first person in Table
     def export_action(self):
-        self.widget.add_status_message("export - not yet implemented")
+        self.widget.add_status_message("export - " + self.data.get_text("NOT_IMPLEMENTED"))
     def fill_table(self, data):
         self.tableWidget.fill_table(data)
     def get_ancestors(self):
@@ -182,9 +185,9 @@ class Main(QMainWindow):
         if dat == "" and place == "":
             return ""
         if dat != "":
-            dat = sign + " am " + dat
+            dat = sign + " " + self.data.get_text("ON") + " " + dat
         if place != "":
-            place = "in " + place        
+            place = self.data.get_text("IN") + " " + place        
         return (dat + " " + place).strip()
     def get_death_full(self, persID):
         if persID in (0, -1): 
@@ -256,6 +259,8 @@ class Main(QMainWindow):
         return self.data.get_table_col_number(fieldname)
     def get_table_field_texts(self):
         return self.data.get_table_col_texts()
+    def get_text(self, ID):
+        return self.data.get_text(ID)
     def get_url(self, persID):
         return self.data.get_indi_attribute(persID, "url")
     def import_action(self):
@@ -309,7 +314,7 @@ class Main(QMainWindow):
     def set_wife(self, famID, wife):
         self.data.set_fam_attribute(famID, "WIFE", wife)
     def statistik_person(self):
-        pass
+        self.widget.add_status_message("statistik_person - " + self.data.get_text("NOT_IMPLEMENTED"))
     def update_table_row(self, persID):
         self.tableWidget.update_table_row(persID)
 
@@ -351,7 +356,6 @@ def main():
     
     ex = Main()
     ex.show()
-    # ex.graphList.addGraph("") # Parameter in Brackets: id of central person; here: no person
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

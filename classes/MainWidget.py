@@ -82,51 +82,51 @@ class MainWindowMenu(QMenuBar):
         super().__init__()
 
         # ----- F I L E ------------------------------------------------------------------------- #
-        fileMenu = self.addMenu("Daten")
+        fileMenu = self.addMenu(parent.get_text("DATA"))
 
-        self.newProjectAction = QAction(QIcon("icons/newproject2.png"), "Neu", self)
+        self.newProjectAction = QAction(QIcon("icons/newproject2.png"), parent.get_text("NEW"), self)
         self.newProjectAction.triggered.connect(parent.create_project)
         fileMenu.addAction(self.newProjectAction)
 
-        self.openProjectAction = QAction(QIcon("icons/openproject2.png"), "Öffnen", self)
+        self.openProjectAction = QAction(QIcon("icons/openproject2.png"), parent.get_text("OPEN"), self)
         self.openProjectAction.triggered.connect(parent.select_project)
         fileMenu.addAction(self.openProjectAction)
 
         fileMenu.addSeparator()
 
-        self.importAction = QAction(QIcon("icons/import2.png"), "Import", self)
+        self.importAction = QAction(QIcon("icons/import2.png"), parent.get_text("IMPORT"), self)
         self.importAction.triggered.connect(parent.import_action)
         fileMenu.addAction(self.importAction)
 
-        self.exportAction = QAction(QIcon("icons/export2.png"), "Export", self)
+        self.exportAction = QAction(QIcon("icons/export2.png"), parent.get_text("EXPORT"), self)
         self.exportAction.triggered.connect(parent.export_action)
         fileMenu.addAction(self.exportAction)
 
         fileMenu.addSeparator()
 
-        self.exitAction = QAction(QIcon("icons/exit2.png"), "Programm beenden", self)
+        self.exitAction = QAction(QIcon("icons/exit2.png"), parent.get_text("PROGRAM_END"), self)
         self.exitAction.triggered.connect(parent.on_exit)
         fileMenu.addAction(self.exitAction)
 
         # --------------------------------------------------------------------------------------- #
-        personMenu = self.addMenu("Person")
+        personMenu = self.addMenu(parent.get_text("PERSON"))
 
-        self.newPersAction = QAction(QIcon("icons/person_new.png"), "Person anlegen", self)
+        self.newPersAction = QAction(QIcon("icons/person_new.png"), parent.get_text("CREATE_PERSON"), self)
         self.newPersAction.triggered.connect(parent.create_person)
         personMenu.addAction(self.newPersAction)
 
-        self.copyLineAction = QAction(QIcon("icons/person_copy.png"), "Person kopieren", self)
+        self.copyLineAction = QAction(QIcon("icons/person_copy.png"), parent.get_text("COPY_PERSON"), self)
         self.copyLineAction.triggered.connect(parent.copy_person)
         personMenu.addAction(self.copyLineAction)
 
-        self.deleteLineAction = QAction(QIcon("icons/person_delete.png"), "Person löschen", self)
+        self.deleteLineAction = QAction(QIcon("icons/person_delete.png"), parent.get_text("DELETE_PERSON"), self)
         self.deleteLineAction.triggered.connect(parent.delete_person)
         personMenu.addAction(self.deleteLineAction)
 
         # --------------------------------------------------------------------------------------- #
-        statistikMenu = self.addMenu("Statistik")
+        statistikMenu = self.addMenu(parent.get_text("STATISTICS"))
 
-        self.anz_pers_Action = QAction(QIcon("icons/personen.png"), "Anzahl Personen", self)
+        self.anz_pers_Action = QAction(QIcon("icons/personen.png"), parent.get_text("NUMBER_PERSON"), self)
         self.anz_pers_Action.triggered.connect(parent.statistik_person)
         statistikMenu.addAction(self.anz_pers_Action)
 
@@ -148,15 +148,15 @@ class MainWindowToolbars():
         self.navToolBar.setStyleSheet('background-color:' + bgColor + ';width:50px;')
         self.navToolBar.setFixedHeight(200)
 
-        fileToolbarAction = QAction(QIcon("icons/file.png"), "Daten", parent)
+        fileToolbarAction = QAction(QIcon("icons/file.png"), parent.get_text("DATA"), parent)
         fileToolbarAction.triggered.connect(self.switch_to_file_menu)
         self.navToolBar.addAction(fileToolbarAction)
 
-        outToolbarAction = QAction(QIcon("icons/person.png"), "Person", parent)
+        outToolbarAction = QAction(QIcon("icons/person.png"), parent.get_text("PERSON"), parent)
         outToolbarAction.triggered.connect(self.switch_to_person_menu)
         self.navToolBar.addAction(outToolbarAction)
 
-        statToolbarAction = QAction(QIcon("icons/diagram.png"), "Statistik", parent)
+        statToolbarAction = QAction(QIcon("icons/diagram.png"), parent.get_text("STATISTICS"), parent)
         statToolbarAction.triggered.connect(self.switch_to_statistik_menu)
         self.navToolBar.addAction(statToolbarAction)
 

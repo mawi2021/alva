@@ -13,8 +13,8 @@ class Data():
         self.conn_config   = None
         self.cursor_config = None
         self.base_dir      = os.path.dirname(__file__) + os.sep + ".." + os.sep
-        self.project_dir   = self.base_dir + "data"
-        self.config_dir    = self.base_dir + "config"
+        self.project_dir   = self.base_dir + "data" + os.sep
+        self.config_dir    = self.base_dir + "config" + os.sep
         self.project       = None
         self.indi_columns = [   ["id",          "INTEGER PRIMARY key"],
                                 ["GIVN",        "TEXT"],
@@ -43,53 +43,66 @@ class Data():
                                 ["MARR_PLAC",   "TEXT"],
                                 ["comment",     "TEXT"]
                             ]
-        self.conf_columns  = [  ["config_name", "TEXT"],
-                                ["property",    "TEXT"],
-                                ["value",       "TEXT"]
-                            ]
-        self.text_columns  = [  ["name",        "TEXT"],
-                                ["language",    "TEXT"],
-                                ["text",        "TEXT"]
-                            ]
         self.check_conf_db()
-        self.check_text_db()
 
     def check_conf_db(self):
         # Check existence of config subdirectory
-        dir_conf = self.base_dir + "config" + os.sep
-        if not os.path.exists(dir_conf):
-            os.makedirs(dir_conf)
+        if not os.path.exists(self.config_dir):
+            os.makedirs(self.config_dir)
         
         # Connect to or create config-database
-        self.conn_config = sqlite3.connect(dir_conf + "config.db") 
+        self.conn_config = sqlite3.connect(self.config_dir + "config.db") 
         self.cursor_config = self.conn_config.cursor()
         self.cursor_config.execute("SELECT name FROM sqlite_master WHERE type='table';") 
 
         found_conf = False
-        for tabelle in self.cursor_config.fetchall():
-            if "CONF" == tabelle[0]:
+        found_text = False
+        for table in self.cursor_config.fetchall():
+            if "CONF" == table[0]:
                 found_conf = True
-                break
+            elif "TEXT" == table[0]:
+                found_text = True
 
         # Check existence or create table CONF in config-database
         if not found_conf:
-            field_str = ""
-            for col in self.conf_columns:
-                field_str = field_str + col[0] + " " + col[1] + ",\n"
-            self.cursor_config.execute("""CREATE TABLE IF NOT EXISTS CONF (""" + field_str \
-                                       + """PRIMARY KEY(config_name, property) )""")
-        else:
-            self.cursor_config.execute("PRAGMA table_info(CONF)")
-            fields = [row[1] for row in self.cursor_config.fetchall()]  # column name in index 1
-            for col in self.conf_columns:
-                if col[0] not in fields:
-                    self.cursor_config.execute("ALTER TABLE CONF ADD COLUMN " + col[0] + " " + col[1] + ";")
-                    self.conn_config.commit()
+            self.cursor_config.execute("CREATE TABLE IF NOT EXISTS CONF (" \
+                                       + "config_name TEXT, " \
+                                       + "property    TEXT, " \
+                                       + "value       TEXT, " \
+                                       + "PRIMARY KEY(config_name, property) )")
+            self.conn_config.commit()
 
+        # Check existence or create table TEXT in config-database
+        if not found_text:
+            self.cursor_config.execute("CREATE TABLE IF NOT EXISTS TEXT (" \
+                                       + "name     TEXT, " \
+                                       + "language TEXT, " \
+                                       + "text     TEXT, " \
+                                       + "PRIMARY KEY(name, language) )")
+            self.conn_config.commit()
+            
         # Check existence or create property table_columns as default
         self.set_conf_defaults()
         self.project = self.get_project() 
         self.language = self.get_conf_attribute("default", "language")
+
+        # Fill language-dependent texts from file to DB
+        found = False
+        self.cursor_config.execute("SELECT name FROM TEXT WHERE language = '" + self.language + "' LIMIT 1")
+        for row in self.cursor_config.fetchall():
+            found = True
+
+        if not found:
+            filename = self.base_dir + "i18n" + os.sep + "i18n_" + self.language + ".properties"
+            if os.path.exists(filename):
+                with open(filename, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line != "":
+                            name, text = line.split("=",2)
+                            self.cursor_config.execute("""INSERT INTO TEXT (name, language, text) """ \
+                                  + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """')""")
+            self.conn_config.commit()
     def check_db_structure(self):
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';") 
         tabellen = self.cursor.fetchall()
@@ -123,34 +136,6 @@ class Data():
                 if col[0] not in fields:
                     self.cursor.execute("ALTER TABLE FAM ADD COLUMN " + col[0] + " " + col[1] + ";")
                     self.conn.commit()
-    def check_text_db(self):
-        # Connect to or create text-database
-        dir_text = self.base_dir + "config" + os.sep
-        self.conn_text = sqlite3.connect(dir_text + "text.db") 
-        self.cursor_text = self.conn_text.cursor()
-        self.cursor_text.execute("SELECT name FROM sqlite_master WHERE type='table';") 
-
-        found_text = False
-        for table in self.cursor_text.fetchall():
-            if "TEXT" == table[0]:
-                found_text = True
-                break
-
-        # Check existence or create table TEXT in text-database
-        if not found_text:
-            field_str = ""
-            for col in self.text_columns:
-                field_str = field_str + col[0] + " " + col[1] + ",\n"
-            self.cursor_text.execute("""CREATE TABLE IF NOT EXISTS TEXT (""" + field_str \
-                                       + """PRIMARY KEY(name, language) )""")
-            self.set_text_defaults()
-        else:
-            self.cursor_text.execute("PRAGMA table_info(TEXT)")
-            fields = [row[1] for row in self.cursor_text.fetchall()]  # column name in index 1
-            for col in self.text_columns:
-                if col[0] not in fields:
-                    self.cursor_text.execute("ALTER TABLE TEXT ADD COLUMN " + col[0] + " " + col[1] + ";")
-                    self.conn_text.commit()
     def convert_data_format_json_to_db(self, file):
         # ----- Figure out codepage of file ----- #
         bytes = min(32, os.path.getsize(file))
@@ -188,9 +173,9 @@ class Data():
                             elif key in ("FAMC", "FAMS"):
                                 pass  # no message
                             else:
-                                self.main.add_status_message("UNKNOWN key in INDI: " + key)
+                                self.main.add_status_message(self.get_text("UNKNOWN_KEY") + " INDI: " + key)
                     else:
-                        self.main.add_status_message("NO 'id' in INDI")
+                        self.main.add_status_message(self.get_text("UNKNOWN_KEY") + " INDI")
                         
             elif table == "FAM":
                 for family in jData[table]:
@@ -216,14 +201,14 @@ class Data():
                             elif key == "CHIL":
                                 children = family[key]
                             else:
-                                self.main.add_status_message("UNKNOWN key in FAM: " + key)
+                                self.main.add_status_message(self.get_text("UNKNOWN_KEY") + " FAM: " + key)
                         for child in children:
                             if father != "":
                                 self.set_indi_attribute(int(child[2:-1]), "father", father)
                             if mother != "":
                                 self.set_indi_attribute(int(child[2:-1]), "mother", mother)
             else:
-                self.main.add_status_message("UNKNOWN TABLE: " + table)
+                self.main.add_status_message(self.get_text("UNKNOWN_TABLE") + ": " + table)
     def convert_data_format_csv_to_db(self, file): # field separator in csv is "#§" and no " around fields; no header line
         # ----- Figure out codepage of file ----- #
         bytes = min(32, os.path.getsize(file))
@@ -249,22 +234,22 @@ class Data():
                     continue
 
                 if len(fields) > 25:
-                    self.main.add_status_message("Conversion error! in line with id " + fields[0])
+                    self.main.add_status_message(self.get_text("CONVERSION_ERROR") + " " + fields[0])
                     continue
 
                 # Process data #
                 # 13 #§ehePartner  <= redundant, ignore
                 # 14 #§kinder      <= redundant, ignore
-                self.main.add_status_message("Processing personID: " + fields[0])
+                self.main.add_status_message(self.get_text("PROCESS_PERSON") + ": " + fields[0])
 
                 urls = fields[19] + "\n" + fields[20] + "\n" + fields[21] + "\n" + fields[22]
                 urls = urls.replace("\n\n","\n").replace("\n\n","\n").replace("\n\n","\n")
 
                 source = fields[17]
                 if fields[8] != "" and fields[8] != "0":
-                    source = source + "\nGeburtsregister " + fields[8]
+                    source = source + "\n" + self.get_text("BIRTH_REG") + " " + fields[8]
                 if fields[12] != "" and fields[12] != "0":
-                    source = source + "\nSterberegister " + fields[12]
+                    source = source + "\n" + self.get_text("DEATH_REG") + " " + fields[12]
                 source = source.replace("\n\n","\n")
 
                 val_fields = fields[0]  + ",'"  + fields[1]  + "','" + fields[3]  + "','" + fields[4]  + "','" + fields[5] + "','"  \
@@ -281,7 +266,7 @@ class Data():
         # ----- Get Filename, which is to be imported ----- #
         fileDlg = QFileDialog()
         fileStruc = fileDlg.getOpenFileName( self.main, \
-                'Wählen Sie nun noch die zu importierende Datei der Ehen aus', \
+                self.get_text("CHOICE_IMPORT_MARRIAGE_FILE"), \
                 "MyImport/", \
                 "Gedcom CSV (*.csv);;"
             )
@@ -305,10 +290,10 @@ class Data():
                     continue
 
                 if len(fields) > 6:
-                    self.main.add_status_message("Conversion error! in line with id " + fields[0])
+                    self.main.add_status_message(self.get_text("CONVERSION_ERROR") + fields[0])
                     continue
 
-                self.main.add_status_message("Processing marriageID: " + fields[0])
+                self.main.add_status_message(self.get_text("PROCESS_MARRIAGE") + ": " + fields[0])
                 val_fields = fields[0]  + ","  + fields[1]  + "," + fields[2]  + ",'" + fields[3]  + "','" + fields[4] + "','" + fields[5] + "'"
 
                 self.cursor.execute("INSERT INTO FAM ("+ tab_fields + ") VALUES (" + val_fields + ")")
@@ -320,7 +305,7 @@ class Data():
                 # 5  #§kommentar
             self.conn.commit()  
     def create_db(self, project_name):
-        self.conn = sqlite3.connect(self.base_dir + "config" + os.sep + project_name + ".db") 
+        self.conn = sqlite3.connect(self.project_dir + project_name + ".db") 
         self.cursor = self.conn.cursor()
         self.create_db_tab_indi()
         self.create_db_tab_fam()
@@ -374,9 +359,10 @@ class Data():
         if not os.path.exists(self.project_dir):
             os.makedirs(self.project_dir)
 
+        proj_txt = self.get_text("PROJECTNAME")
         projectName, ok = QInputDialog.getText(self.main, \
-                                            'Projektname', \
-                                            'Bitte geben Sie einen Projektnamen an:' \
+                                            proj_txt, \
+                                            self.get_text("GIVE_PROJECTNAME") \
                                             )
 
         while True:
@@ -385,13 +371,13 @@ class Data():
             fileName = self.project_dir + os.sep + projectName + ".db"
 
             if os.path.isfile(fileName): 
-                txt = "Das Projekt " + projectName + \
-                      " existiert bereits. Bitte wählen Sie einen anderen Namen"
-                projectName, ok = QInputDialog.getText(self.main, 'Projektname', txt )
+                txt = proj_txt + " " + projectName + \
+                      " " + self.get_text("NAME_EXISTS")
+                projectName, ok = QInputDialog.getText(self.main, proj_txt, txt )
             elif projectName == "":
                 projectName, ok = QInputDialog.getText(self.main, \
-                                                'Projektname', \
-                                                'Bitte geben Sie einen Projektnamen an:' \
+                                                proj_txt, \
+                                                self.get_text("GIVE_PROJECTNAME") \
                                             )
             else:
                 break
@@ -425,217 +411,218 @@ class Data():
                 return True
         return False
     def exportData(self):
+        self.main.add_status_message("exportData - " + self.get_text("NOT_IMPLEMENTED"))
         # Conversion of json fle to ged file
-        fileDlg = QFileDialog()
-        fname = fileDlg.getOpenFileName( self.main, \
-                'Wählen Sie die umzuwandelnde json Datei aus', \
-                "MyImport/", \
-                "Json (*.json)"
-            )
-        file_from = fname[0]
-        file_to = fname[0][0:-5] + ".ged"
+        # fileDlg = QFileDialog()
+        # fname = fileDlg.getOpenFileName( self.main, \
+        #         'Wählen Sie die umzuwandelnde json Datei aus', \
+        #         "MyImport/", \
+        #         "Json (*.json)"
+        #     )
+        # file_from = fname[0]
+        # file_to = fname[0][0:-5] + ".ged"
         
-        # Stop if nothing chosen
-        if file_from == "":
-            return
+        # # Stop if nothing chosen
+        # if file_from == "":
+        #     return
         
-        note_cnt = 1
-        note_obj = []
+        # note_cnt = 1
+        # note_obj = []
 
-        # ----- Header ----- #
-        fw = open(file_to, 'w', encoding='utf8')
-        fw.write("0 HEAD\n")
-        fw.write("1 SOUR Alva\n")
-        fw.write("2 CORP (private)\n")
-        fw.write("3 ADDR https://alva.ur-ahn.de\n")
-        fw.write("1 SUBM @SUB@\n")
-        fw.write("1 GEDC\n")
-        fw.write("2 VERS 5.5\n")
-        fw.write("2 FORM LINEAGE-LINKED\n")
-        fw.write("1 CHAR UTF-8\n")
-        fw.write("1 LANG German\n")
-        fw.write("0 @SUB@ SUBM\n")
-        fw.write("1 NAME Manuela Kugel\n")
-        fw.write("1 ADDR \n")
-        fw.write("2 CONT mawi@online.de\n")
-        fw.close()
+        # # ----- Header ----- #
+        # fw = open(file_to, 'w', encoding='utf8')
+        # fw.write("0 HEAD\n")
+        # fw.write("1 SOUR Alva\n")
+        # fw.write("2 CORP (private)\n")
+        # fw.write("3 ADDR https://alva.ur-ahn.de\n")
+        # fw.write("1 SUBM @SUB@\n")
+        # fw.write("1 GEDC\n")
+        # fw.write("2 VERS 5.5\n")
+        # fw.write("2 FORM LINEAGE-LINKED\n")
+        # fw.write("1 CHAR UTF-8\n")
+        # fw.write("1 LANG German\n")
+        # fw.write("0 @SUB@ SUBM\n")
+        # fw.write("1 NAME Manuela Kugel\n")
+        # fw.write("1 ADDR \n")
+        # fw.write("2 CONT mawi@online.de\n")
+        # fw.close()
         
-        # ----- Read json File ----- #
-        with open(file_from, encoding="utf-8") as json_file:
-            data = json.load( json_file )
+        # # ----- Read json File ----- #
+        # with open(file_from, encoding="utf-8") as json_file:
+        #     data = json.load( json_file )
         
-        # ----- Each Person ----- #
-        i = 0
-        for obj in data["INDI"]:
-            f = open(file_to, 'a', encoding='utf8')
+        # # ----- Each Person ----- #
+        # i = 0
+        # for obj in data["INDI"]:
+        #     f = open(file_to, 'a', encoding='utf8')
             
-            i = i + 1
-            if i % 250 == 0:
-                self.main.add_status_message("Konvertiere " + str(i) + ". Person ")    
+        #     i = i + 1
+        #     if i % 250 == 0:
+        #         self.main.add_status_message("Konvertiere " + str(i) + ". Person ")    
             
-            if "id" in obj:
-                f.write("0 @" + str(obj["id"]) + "@ INDI\n")
+        #     if "id" in obj:
+        #         f.write("0 @" + str(obj["id"]) + "@ INDI\n")
                 
-            if "NAME" in obj:
-                if "id" in obj["NAME"]:
-                    f.write("1 NAME " + obj["NAME"]["id"] + "\n")
-                if "GIVN" in obj["NAME"]:
-                    f.write("2 GIVN " + obj["NAME"]["GIVN"] + "\n")
-                if "SURN" in obj["NAME"]:
-                    f.write("2 SURN " + obj["NAME"]["SURN"] + "\n")
+        #     if "NAME" in obj:
+        #         if "id" in obj["NAME"]:
+        #             f.write("1 NAME " + obj["NAME"]["id"] + "\n")
+        #         if "GIVN" in obj["NAME"]:
+        #             f.write("2 GIVN " + obj["NAME"]["GIVN"] + "\n")
+        #         if "SURN" in obj["NAME"]:
+        #             f.write("2 SURN " + obj["NAME"]["SURN"] + "\n")
             
-            if "SEX" in obj:
-                if obj["SEX"] == "m":
-                    f.write("1 SEX M\n")
-                elif obj["SEX"] == "w":
-                    f.write("1 SEX F\n")
+        #     if "SEX" in obj:
+        #         if obj["SEX"] == "m":
+        #             f.write("1 SEX M\n")
+        #         elif obj["SEX"] == "w":
+        #             f.write("1 SEX F\n")
                 
-            if "BIRT" in obj:
-                f.write("1 BIRT\n")
-                if "DATE" in obj["BIRT"]:
-                    found, date = self._convertDateToGedFormat(obj["BIRT"]["DATE"])
-                    if found:
-                        f.write("2 DATE " + date + "\n")
-                if "PLAC" in obj["BIRT"]:
-                    f.write("2 PLAC " + obj["BIRT"]["PLAC"] + "\n")
+        #     if "BIRT" in obj:
+        #         f.write("1 BIRT\n")
+        #         if "DATE" in obj["BIRT"]:
+        #             found, date = self._convertDateToGedFormat(obj["BIRT"]["DATE"])
+        #             if found:
+        #                 f.write("2 DATE " + date + "\n")
+        #         if "PLAC" in obj["BIRT"]:
+        #             f.write("2 PLAC " + obj["BIRT"]["PLAC"] + "\n")
             
-            if "DEAT" in obj:
-                f.write("1 DEAT\n")
-                if "DATE" in obj["DEAT"]:
-                    found, date = self._convertDateToGedFormat(obj["DEAT"]["DATE"])
-                    if found:
-                        f.write("2 DATE " + date + "\n")
-                if "PLAC" in obj["DEAT"]:
-                    f.write("2 PLAC " + obj["DEAT"]["PLAC"] + "\n")
+        #     if "DEAT" in obj:
+        #         f.write("1 DEAT\n")
+        #         if "DATE" in obj["DEAT"]:
+        #             found, date = self._convertDateToGedFormat(obj["DEAT"]["DATE"])
+        #             if found:
+        #                 f.write("2 DATE " + date + "\n")
+        #         if "PLAC" in obj["DEAT"]:
+        #             f.write("2 PLAC " + obj["DEAT"]["PLAC"] + "\n")
             
-            if "CHR" in obj:  # Taufe
-                f.write("1 CHR\n")  
-                if "DATE" in obj["CHR"]:
-                    found, date = self._convertDateToGedFormat(obj["CHR"]["DATE"])
-                    if found:
-                        f.write("2 DATE " +date + "\n")
+        #     if "CHR" in obj:  # Taufe
+        #         f.write("1 CHR\n")  
+        #         if "DATE" in obj["CHR"]:
+        #             found, date = self._convertDateToGedFormat(obj["CHR"]["DATE"])
+        #             if found:
+        #                 f.write("2 DATE " +date + "\n")
         
-            if "FAMC" in obj: # my parents - can only happen once
-                f.write("1 FAMC @" + str(obj["FAMC"]) + "@\n")
+        #     if "FAMC" in obj: # my parents - can only happen once
+        #         f.write("1 FAMC @" + str(obj["FAMC"]) + "@\n")
                 
-            if "FAMS" in obj:
-                for fams in obj["FAMS"]:
-                    f.write("1 FAMS @" + str(fams) + "@\n")
+        #     if "FAMS" in obj:
+        #         for fams in obj["FAMS"]:
+        #             f.write("1 FAMS @" + str(fams) + "@\n")
             
-            # Comments
-            if "comment" in obj:
-                f.write("1 NOTE @N" + str(note_cnt) + "@\n")
-                note_obj.append({note_cnt: "Tauf-Eintrag/Kommentar: " + obj["comment"]})
-                note_cnt = note_cnt + 1
-            if "comment_father" in obj:
-                f.write("1 NOTE @N" + str(note_cnt) + "@\n")
-                note_obj.append({note_cnt: "Tauf-Eintrag >> Vater: " + obj["comment_father"]})
-                note_cnt = note_cnt + 1
-            if "comment_mother" in obj:
-                f.write("1 NOTE @N" + str(note_cnt) + "@\n")
-                note_obj.append({note_cnt: "Tauf-Eintrag >> Mutter: " + obj["comment_mother"]})
-                note_cnt = note_cnt + 1            
+        #     # Comments
+        #     if "comment" in obj:
+        #         f.write("1 NOTE @N" + str(note_cnt) + "@\n")
+        #         note_obj.append({note_cnt: "Tauf-Eintrag/Kommentar: " + obj["comment"]})
+        #         note_cnt = note_cnt + 1
+        #     if "comment_father" in obj:
+        #         f.write("1 NOTE @N" + str(note_cnt) + "@\n")
+        #         note_obj.append({note_cnt: "Tauf-Eintrag >> Vater: " + obj["comment_father"]})
+        #         note_cnt = note_cnt + 1
+        #     if "comment_mother" in obj:
+        #         f.write("1 NOTE @N" + str(note_cnt) + "@\n")
+        #         note_obj.append({note_cnt: "Tauf-Eintrag >> Mutter: " + obj["comment_mother"]})
+        #         note_cnt = note_cnt + 1            
             
-            f.close()
+        #     f.close()
             
-        self.main.add_status_message("Export Personen abgeschlossen")
+        # self.main.add_status_message("Export Personen abgeschlossen")
             
-        # ----- Each Family ----- #
-        i = 0
-        for obj in data["FAM"]:
-            f = open(file_to, 'a', encoding='utf8')
+        # # ----- Each Family ----- #
+        # i = 0
+        # for obj in data["FAM"]:
+        #     f = open(file_to, 'a', encoding='utf8')
             
-            i = i + 1
-            if i % 100 == 0:
-                self.main.add_status_message("Konvertiere " + str(i) + ". Familie ")    
+        #     i = i + 1
+        #     if i % 100 == 0:
+        #         self.main.add_status_message("Konvertiere " + str(i) + ". Familie ")    
 
-            if "id" in obj:
-                if str(obj["id"])[0] != 'F':
-                    f.write("0 @F" + str(obj["id"]) + "@ FAM\n")
-                else:
-                    f.write("0 @" + str(obj["id"]) + "@ FAM\n")
+        #     if "id" in obj:
+        #         if str(obj["id"])[0] != 'F':
+        #             f.write("0 @F" + str(obj["id"]) + "@ FAM\n")
+        #         else:
+        #             f.write("0 @" + str(obj["id"]) + "@ FAM\n")
             
-            if "HUSB" in obj:
-                if str(obj["HUSB"])[0] != 'I':
-                    f.write("1 HUSB @I" + str(obj["HUSB"]) + "@\n")
-                else:
-                    f.write("1 HUSB @" + str(obj["HUSB"]) + "@\n")
+        #     if "HUSB" in obj:
+        #         if str(obj["HUSB"])[0] != 'I':
+        #             f.write("1 HUSB @I" + str(obj["HUSB"]) + "@\n")
+        #         else:
+        #             f.write("1 HUSB @" + str(obj["HUSB"]) + "@\n")
                 
-            if "WIFE" in obj:
-                if str(obj["WIFE"])[0] != 'I':
-                    f.write("1 WIFE @I" + str(obj["WIFE"]) + "@\n")
-                else:
-                    f.write("1 WIFE @" + str(obj["WIFE"]) + "@\n")
+        #     if "WIFE" in obj:
+        #         if str(obj["WIFE"])[0] != 'I':
+        #             f.write("1 WIFE @I" + str(obj["WIFE"]) + "@\n")
+        #         else:
+        #             f.write("1 WIFE @" + str(obj["WIFE"]) + "@\n")
             
-            if "CHIL" in obj:
-                for chil in obj["CHIL"]:
-                    if chil[0] != 'I':
-                        f.write("1 CHIL @I" + chil + "@\n")
-                    else:
-                        f.write("1 CHIL @" + chil + "@\n")
+        #     if "CHIL" in obj:
+        #         for chil in obj["CHIL"]:
+        #             if chil[0] != 'I':
+        #                 f.write("1 CHIL @I" + chil + "@\n")
+        #             else:
+        #                 f.write("1 CHIL @" + chil + "@\n")
         
-            if "MARR" in obj:        
-                f.write("1 MARR\n")
-                if "DATE" in obj["MARR"]:
-                    found, date = self._convertDateToGedFormat(obj["MARR"]["DATE"])
-                    if found:
-                        f.write("2 DATE " +date + "\n")
-                if "PLAC" in obj["MARR"]:
-                    f.write("2 PLAC " + obj["MARR"]["PLAC"] + "\n")
+        #     if "MARR" in obj:        
+        #         f.write("1 MARR\n")
+        #         if "DATE" in obj["MARR"]:
+        #             found, date = self._convertDateToGedFormat(obj["MARR"]["DATE"])
+        #             if found:
+        #                 f.write("2 DATE " +date + "\n")
+        #         if "PLAC" in obj["MARR"]:
+        #             f.write("2 PLAC " + obj["MARR"]["PLAC"] + "\n")
         
-            # Kommentare (Vater, Mutter, Ehe)
-            if "comment" in obj:
-                f.write("1 NOTE @N" + str(note_cnt) + "@\n")
-                note_obj.append({note_cnt: "Ehe-Eintrag der Eltern: " + obj["comment"]})
-                note_cnt = note_cnt + 1
-            if "comment_father" in obj:
-                f.write("1 NOTE @N" + str(note_cnt) + "@\n")
-                note_obj.append({note_cnt: "Ehe-Eintrag der Eltern >> Bräutigam: " + obj["comment_father"]})
-                note_cnt = note_cnt + 1
-            if "comment_mother" in obj:
-                f.write("1 NOTE @N" + str(note_cnt) + "@\n")
-                note_obj.append({note_cnt: "Ehe-Eintrag der Eltern >> Braut: " + obj["comment_mother"]})
-                note_cnt = note_cnt + 1            
+        #     # Kommentare (Vater, Mutter, Ehe)
+        #     if "comment" in obj:
+        #         f.write("1 NOTE @N" + str(note_cnt) + "@\n")
+        #         note_obj.append({note_cnt: "Ehe-Eintrag der Eltern: " + obj["comment"]})
+        #         note_cnt = note_cnt + 1
+        #     if "comment_father" in obj:
+        #         f.write("1 NOTE @N" + str(note_cnt) + "@\n")
+        #         note_obj.append({note_cnt: "Ehe-Eintrag der Eltern >> Bräutigam: " + obj["comment_father"]})
+        #         note_cnt = note_cnt + 1
+        #     if "comment_mother" in obj:
+        #         f.write("1 NOTE @N" + str(note_cnt) + "@\n")
+        #         note_obj.append({note_cnt: "Ehe-Eintrag der Eltern >> Braut: " + obj["comment_mother"]})
+        #         note_cnt = note_cnt + 1            
             
-            f.close()
+        #     f.close()
             
-        self.main.add_status_message("Export Familien abgeschlossen")
+        # self.main.add_status_message("Export Familien abgeschlossen")
             
-        i = 0
-        for obj in note_obj:
-            i = i + 1
-            if i % 500 == 0:
-                self.main.add_status_message("Konvertiere " + str(i) + ". Kommentar")    
+        # i = 0
+        # for obj in note_obj:
+        #     i = i + 1
+        #     if i % 500 == 0:
+        #         self.main.add_status_message("Konvertiere " + str(i) + ". Kommentar")    
 
-            f = open(file_to, 'a', encoding='utf8')
-            for key in obj:
-                obj[key] = obj[key].replace("\n", " ")
+        #     f = open(file_to, 'a', encoding='utf8')
+        #     for key in obj:
+        #         obj[key] = obj[key].replace("\n", " ")
                 
-                if len(obj[key]) >= 70:
-                    f.write("0 @N" + str(key) + "@ NOTE " + obj[key][0:70] + "\n")
-                    obj[key] = obj[key][70:]
-                else:
-                    f.write("0 @N" + str(key) + "@ NOTE " + obj[key] + "\n")
-                    obj[key] = ""
+        #         if len(obj[key]) >= 70:
+        #             f.write("0 @N" + str(key) + "@ NOTE " + obj[key][0:70] + "\n")
+        #             obj[key] = obj[key][70:]
+        #         else:
+        #             f.write("0 @N" + str(key) + "@ NOTE " + obj[key] + "\n")
+        #             obj[key] = ""
                     
-                while len(obj[key]) > 0:
-                    if len(obj[key]) >= 70:
-                        f.write("1 CONC " + obj[key][0:70] + "\n")
-                        obj[key] = obj[key][70:]
-                    else:
-                        f.write("1 CONC " + obj[key] + "\n")
-                        obj[key] = ""
+        #         while len(obj[key]) > 0:
+        #             if len(obj[key]) >= 70:
+        #                 f.write("1 CONC " + obj[key][0:70] + "\n")
+        #                 obj[key] = obj[key][70:]
+        #             else:
+        #                 f.write("1 CONC " + obj[key] + "\n")
+        #                 obj[key] = ""
 
-            f.close()
+        #     f.close()
             
-        self.main.add_status_message("Export Kommentare abgeschlossen")
+        # self.main.add_status_message("Export Kommentare abgeschlossen")
             
-        # ----- Footer ----- #
-        fw = open(file_to, 'a', encoding='utf8')
-        fw.write("0 TRLR\n")
-        f.close()
+        # # ----- Footer ----- #
+        # fw = open(file_to, 'a', encoding='utf8')
+        # fw.write("0 TRLR\n")
+        # f.close()
         
-        self.main.add_status_message("----- Export abgeschlossen -----")
+        # self.main.add_status_message("----- Export abgeschlossen -----")
     def get_ancestors(self, persID):
         ids = {persID:{"child":-1}}    # each record includes: persID: { <table INDI>, partners (list), birth, death, year, child }
         lines = []                     # each record includes: boxLeft, boxRight
@@ -993,14 +980,14 @@ class Data():
         return txt_list
     def get_text(self, ID):
         query = "SELECT text FROM TEXT WHERE name = '" + ID + "' AND language = '" + self.language + "'"
-        self.cursor_text.execute(query)
-        for row in self.cursor_text.fetchall():
+        self.cursor_config.execute(query)
+        for row in self.cursor_config.fetchall():
             return row[0]
     def import_data(self):
         # ----- Get Filename, which is to be imported ----- #
         fileDlg = QFileDialog()
         fileStruc = fileDlg.getOpenFileName( self.main, \
-                'Wählen Sie die zu importierende Datei aus', \
+                self.get_text("CHOICE_IMPORT_FILE"), \
                 "MyImport/", \
                 "Gedcom CSV (*.csv);;(*.json)" #(*.ged);;Excel (*.xlsx);;Json (*.json)"
             )
@@ -1027,8 +1014,8 @@ class Data():
                 self._convertDataFormatXlsxToJson(fileName)
             else:
                 QMessageBox.information(self.main, \
-                    "Einlesen nicht möglich", \
-                    "Das gewählte Format wurde noch nicht implementiert", \
+                    self.get_text("FILE_READ_ERROR"), \
+                    self.get_text("FORMAT_NOT_IMPLEMENTED"), \
                     buttons=QMessageBox.Ok
                   )
                 return
@@ -1041,8 +1028,8 @@ class Data():
             self.widget.clear_widgets()
 
         QMessageBox.information(self.main, \
-            "Konvertierung beendet", \
-            "Alle Daten wurden konvertiert", \
+            self.get_text("CONVERSION_FINISHED"), \
+            self.get_text("CONVERSION_SUCCESS"), \
             buttons=QMessageBox.Ok
         )
     def init_project(self):
@@ -1052,15 +1039,13 @@ class Data():
             self.set_project(self.project)
     def on_exit(self):
         self.conn.close()
-        return 
     def select_project(self):                            # asks for project from list of existing projects
-        # Search for files in "data" subdirectory
+        # Search for files in data subdirectory
         items = []
-        data_dir = self.base_dir + "data"
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
+        if not os.path.exists(self.project_dir):
+            os.makedirs(self.project_dir)
 
-        files = os.listdir(data_dir)
+        files = os.listdir(self.project_dir)
         for file in files:
             if file.endswith(".db"):
                 items.append(file.removesuffix(".db"))
@@ -1070,8 +1055,8 @@ class Data():
             project = self.create_project()
             ok = True
         else:
-            project, ok = QInputDialog.getItem(self.main, "Auswahl des Projektes", \
-                "Projekte", items, 0, False)
+            project, ok = QInputDialog.getItem(self.main, self.get_text("CHOICE_PROJECT"), \
+                self.get_text("PROJECTS"), items, 0, False)
 
         if ok and project:
             self.set_project(project)
@@ -1093,7 +1078,7 @@ class Data():
                     + 'BIRT_PLAC:Geb. Ort,DEAT_DATE:Tod Datum,DEAT_PLAC:Tod Ort,' \
                     + 'father:VaterID,mother:MutterID,SEX:Geschlecht,no_child:Kinderlos,' \
                     + 'guess_birth:Geburtsjahr geschätzt,guess_death:Todesjahr geschätzt'
-        dict["language"] = "DE"
+        dict["language"] = "de"
 
         for property in dict:
             value = dict[property]
@@ -1107,7 +1092,7 @@ class Data():
         self.project = None
         self.conn    = None
         self.cursor  = None    
-        self.main.setWindowTitle('Alva (Kein Projekt geöffnet)')  
+        self.main.setWindowTitle("Alva (" + self.get_text("NO_OPEN_PROJECT") + ")")  
         self.main.close_graphs()   # In case, graphs are open, windows are closed
         self.main.clear_widgets()  # Empty other Widgets
     def set_fam_attribute(self, famID, attribute, value):
@@ -1147,7 +1132,7 @@ class Data():
         self.set_conf_attribute("default", "project", self.project)
 
         # Create / enhance project database and tables, if necessary
-        db_filename = self.base_dir + "data" + os.sep + project_name + ".db"
+        db_filename = self.project_dir + project_name + ".db"
         if not os.path.exists(db_filename):
             self.create_db(project_name)
 
@@ -1155,7 +1140,7 @@ class Data():
         self.cursor = self.conn.cursor()
         self.check_db_structure()
     
-        self.main.setWindowTitle('Alva -> Projekt "' + project_name + '"')  
+        self.main.setWindowTitle("Alva -> " + self.get_text("PROJECT") + ' "' + project_name + '"')  
 
         # In case, graphs are open, windows are closed
         self.main.close_graphs()
@@ -1168,23 +1153,6 @@ class Data():
             self.main.set_person(data[0][0])    # first person, always first value is "id"
         else:
             self.main.clear_widgets()
-    def set_text_defaults(self):
-        list = []
-        list.append(["YES", "DE", "Ja"])
-        list.append(["NO", "DE", "Nein"])
-        list.append(["SURE_1", "DE", "Sind Sie sicher, dass die Person mit ID "])
-        list.append(["SURE_2", "DE", " gelöscht werden soll?"])
-
-        for idx in list:
-            name     = idx[0]
-            language = idx[1]
-            text     = idx[2]
-            query = """INSERT INTO TEXT (name, language, text) """ \
-                  + """VALUES ('""" + name + """', '""" + language + """', '""" + text + """') """\
-                  + """ON CONFLICT (name, language) DO UPDATE SET text = excluded.text"""
-            self.cursor_text.execute(query)
-        self.conn_text.commit()
-
     def _convertDateToGedFormat(self, date):
         dayStr = ""
         monthStr = ""
