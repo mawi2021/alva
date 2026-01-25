@@ -2,12 +2,7 @@ from PyQt5.QtWidgets import QWidget, QTableWidget, QTableWidgetItem, QVBoxLayout
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 
-# Variable and method check done
-# Constants not checked
-
 class TableWidget(QWidget):
-    # Show some data, not editable
-
     def __init__(self, main):
         super().__init__()
         self.main = main

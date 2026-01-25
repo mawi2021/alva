@@ -6,8 +6,6 @@ from PyQt5.QtWidgets          import *
 import os
 import webbrowser
 
-# classes GraphHTML & GraphList & Bridge
-
 class GraphHtml(QMainWindow):   
     # ----- Read GUI Content from UI File ---------------------------- *
     def __init__(self, main, idList, lineList, minYear, maxYear, mode):

@@ -19,11 +19,9 @@ from classes.Data               import Data
 
 # ALLGEMEIN:
 # ==========
-# Next: PersonWidget: muss einen Scrollbalken bekommen und dafür dürfen die Widgets nicht resizable
-#     sein; evtl. liegt das an den GroupBox-Widgets => kann umgebaut werden zu Labeln mit fixer 
-#     und gleicher Breite, dann hat man den gleichen Formular-Eindruck
 
-# - Fehler: bei Datenänderung der Person ändert sich die blaue Zeile oberhalb der Personendetails nicht
+# - Fehler: bei Datenänderung der Person ändert sich die blaue Zeile oberhalb der Personendetails 
+#     nicht im PersonWidget
 # - Fehler: Datumsangaben in convert_date_to_hr => else-Zweig verbesssern; bzw. alles, was mit Datum und 
 #     Interpretieren der Jahreszahl für das Malen der Stammbäume 
 # - Fehler: Überschreiben von Feldern bei Sortierung und Datenänderung
@@ -360,9 +358,6 @@ def main():
             QLabel, QLineEdit {
                 min-height:20px;
             }
-            QTextEdit {
-                min-height:100px;
-            }
         """)
     
     ex = Main()
@@ -402,6 +397,7 @@ if __name__ == "__main__":
 # - StatusWidget: anklemmen und dort alle Nachrichten ausgeben (alle print() ersetzt)
 # - Konfiguration: Alle Texte in i18n Ordner in Deutsch und Englisch
 # - Konfiguration: Wahl der Sprache => Texte aus i18n in DB-Tabelle TEXT. Default ist "de"; Datenbank: config.db
+# - PersonWidget: muss einen Scrollbalken bekommen und dafür dürfen die Widgets nicht resizable sein
 
 
 # - Genealogie-Software (nach Nutzung im Genealogie-Projekt [Häufigkeit 2025])

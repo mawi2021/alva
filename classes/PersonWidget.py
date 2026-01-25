@@ -1,7 +1,3 @@
-# Sources:
-#   https://www.geeksforgeeks.org/pyqt5-qtabwidget/
-#   https://www.tutorialspoint.com/pyqt/pyqt_qlineedit_widget.htm
-
 from PyQt5.QtWidgets import QTabWidget, QVBoxLayout, QWidget, QLabel, QLineEdit, QFormLayout, \
                             QHBoxLayout, QVBoxLayout, QPushButton, QTextEdit, QRadioButton, \
                             QButtonGroup, QCompleter, QInputDialog, QDialog, QSizePolicy, \
@@ -9,8 +5,7 @@ from PyQt5.QtWidgets import QTabWidget, QVBoxLayout, QWidget, QLabel, QLineEdit,
 from PyQt5.QtCore    import *
 from functools       import partial
 
-class PersonWidget(QScrollArea):
-
+class PersonWidget(QWidget):  # QScrollArea
     def __init__(self, main):
         super().__init__()
         self.main          = main
@@ -26,32 +21,42 @@ class PersonWidget(QScrollArea):
 
         self.initUI()
         self.bgColorNormal = 'background-color:rgb(252, 252, 242)'
-                
     def get_ID(self):
         return self.ID
     def initUI(self):
-        content_widget = QWidget()   
-        layout         = QVBoxLayout(content_widget)
-        self.setWidget(content_widget)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded) 
-        self.setWidgetResizable(True)
+        # content_widget = QWidget()   
+        layout         = QVBoxLayout(self)   # (content_widget)
+        # self.setWidget(content_widget)
+        # self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded) 
+        # self.setWidgetResizable(True)
 
         # Initialize tab screen
         self.qTabWidget = QTabWidget()
 
-        self.tabGeneral = QWidget()
+        # Tab "General"
         self.eSexGroup = QButtonGroup(objectName="general>sexGroup") # must be globally, otherwise no signal received
-        self.qTabWidget.addTab(self.tabGeneral, self.main.get_text("COMMON"))
+        scroll_area1 = QScrollArea()
+        scroll_area1.setWidgetResizable(True)
+        self.tabGeneral = QWidget()
+        scroll_area1.setWidget(self.tabGeneral)
+        self.qTabWidget.addTab(scroll_area1, self.main.get_text("COMMON"))
         self.initUI_add_general_fields()
         
+        # Tab "Parents"
+        scroll_area2 = QScrollArea()
+        scroll_area2.setWidgetResizable(True)
         self.tabParents = QWidget()
-        self.qTabWidget.addTab(self.tabParents, self.main.get_text("PARENTS"))
+        scroll_area2.setWidget(self.tabParents)
+        self.qTabWidget.addTab(scroll_area2, self.main.get_text("PARENTS"))
         self.initUI_add_parents_fields()
         
+        # Tab "Family and Children"
+        scroll_area3 = QScrollArea()
+        scroll_area3.setWidgetResizable(True)
         self.tabFamily  = QWidget()
-        self.formFamilyLayout = QFormLayout()
-        self.qTabWidget.addTab(self.tabFamily, self.main.get_text("OWN_FAMILY"))
+        scroll_area3.setWidget(self.tabFamily)
+        self.qTabWidget.addTab(scroll_area3, self.main.get_text("OWN_FAMILY"))
         self.initUI_add_family_fields()
 
         # Central Person #        
@@ -189,11 +194,13 @@ class PersonWidget(QScrollArea):
         formPersLayout.addRow(self.Death_label, hboxD)
 
         # Comment-Types: url, comment, media, sources #
+        const_box_height = 50
+
         self.urls_label = QLabel(self.main.get_text("URLS"))
         persURLs = QTextEdit(objectName="url")
         persURLs.setAcceptRichText(False)  # => Plain-Text only
         persURLs.focusOutEvent = self.on_person_url_changed
-        persURLs.setFixedHeight(200)
+        persURLs.setFixedHeight(const_box_height)
         persURLs.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         formPersLayout.addRow(self.urls_label, persURLs)
 
@@ -201,18 +208,24 @@ class PersonWidget(QScrollArea):
         persComment = QTextEdit(objectName="comment")
         persComment.setAcceptRichText(False)  # => Plain-Text only
         persComment.focusOutEvent = self.on_person_comment_changed
+        persComment.setFixedHeight(const_box_height)
+        persComment.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         formPersLayout.addRow(self.comment_label, persComment)
 
         self.media_label = QLabel(self.main.get_text("MEDIA"))
         persMedia = QTextEdit(objectName="media")
         persMedia.setAcceptRichText(False)  # => Plain-Text only
         persMedia.focusOutEvent = self.on_person_media_changed
+        persMedia.setFixedHeight(const_box_height)
+        persMedia.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         formPersLayout.addRow(self.media_label, persMedia)    
 
         self.sources_label = QLabel(self.main.get_text("SOURCES"))
         persSource = QTextEdit(objectName="source")
         persSource.setAcceptRichText(False)  # => Plain-Text only
         persSource.focusOutEvent = self.on_person_source_changed
+        persSource.setFixedHeight(const_box_height)
+        persSource.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         formPersLayout.addRow(self.sources_label, persSource)    
 
         # ----- PARENTS ----- #        
@@ -258,6 +271,8 @@ class PersonWidget(QScrollArea):
         ownFamily = QTextEdit(objectName="general>ownFamily")
         ownFamily.setStyleSheet("QTextEdit {margin:5px;padding-left:5px;}")
         ownFamily.setReadOnly(True)
+        ownFamily.setFixedHeight(100)
+        ownFamily.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         formFamilyLayout.addWidget(ownFamily)   
         
         # ----- end ----- #
@@ -313,6 +328,8 @@ class PersonWidget(QScrollArea):
         newRelationship = QPushButton("", self)
 
         self.famWidgetList.append(widgets)
+
+        self.formFamilyLayout = QFormLayout()
         
         # Hochzeit #
         widgets["marriageDate"].editingFinished.connect(lambda wid=widgets["marriageDate"]: self._onEditingMarriageDateFinished(wid,0))
@@ -380,12 +397,9 @@ class PersonWidget(QScrollArea):
         self.setStyleSheet(self.bgColorNormal)
     def refresh_texts(self):
         self.clickTxt = self.main.get_text("CLICK")
-        index = self.qTabWidget.indexOf(self.tabGeneral)
-        self.qTabWidget.setTabText(index, self.main.get_text("COMMON"))
-        index = self.qTabWidget.indexOf(self.tabParents)
-        self.qTabWidget.setTabText(index, self.main.get_text("PARENTS"))
-        index = self.qTabWidget.indexOf(self.tabFamily)
-        self.qTabWidget.setTabText(index, self.main.get_text("OWN_FAMILY"))
+        self.qTabWidget.setTabText(0, self.main.get_text("COMMON"))
+        self.qTabWidget.setTabText(1, self.main.get_text("PARENTS"))
+        self.qTabWidget.setTabText(2, self.main.get_text("OWN_FAMILY"))
         self.backButton.setText(self.main.get_text("BACK"))
         self.addButton.setText(self.main.get_text("NEW_PERSON"))
         self.copyButton.setText(self.main.get_text("COPY_PERSON"))

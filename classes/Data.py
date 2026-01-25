@@ -46,6 +46,8 @@ class Data():
                             ]
         self.check_conf_db()
         self.config_name   = self.get_config_name()
+        self.language      = self.get_conf_attribute("language")
+        self.fill_language_table()
         self.project       = self.get_conf_attribute("project")
 
     def check_conf_db(self):
@@ -85,27 +87,28 @@ class Data():
             self.conn_config.commit()
             
         # Check existence or create property table_columns as default
-        self.set_conf_defaults()
-        self.language = self.get_conf_attribute("language")
+        if not found_conf or not found_text:
+            self.set_conf_defaults()
+        # self.language = self.get_conf_attribute("language")
 
-        # Fill language-dependent texts from file to DB
-        found = False
-        self.cursor_config.execute("SELECT name FROM TEXT WHERE language = '" + self.language + "' LIMIT 1")
-        for row in self.cursor_config.fetchall():
-            found = True
+        # # Fill language-dependent texts from file to DB
+        # found = False
+        # self.cursor_config.execute("SELECT name FROM TEXT WHERE language = '" + self.language + "' LIMIT 1")
+        # for row in self.cursor_config.fetchall():
+        #     found = True
 
-        if not found:
-            filename = self.language_dir + "i18n_" + self.language + ".properties"
-            if os.path.exists(filename):
-                with open(filename, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line != "" and line[0] != "#":
-                            name, text = line.split("=",2)
-                            self.cursor_config.execute("""INSERT INTO TEXT (name, language, text) """ \
-                                  + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """') """ \
-                                  + """ON CONFLICT (name, language) DO UPDATE SET text = excluded.text""")
-            self.conn_config.commit()
+        # if not found:
+        #     filename = self.language_dir + "i18n_" + self.language + ".properties"
+        #     if os.path.exists(filename):
+        #         with open(filename, "r", encoding="utf-8") as f:
+        #             for line in f:
+        #                 line = line.strip()
+        #                 if line != "" and line[0] != "#":
+        #                     name, text = line.split("=",2)
+        #                     self.cursor_config.execute("""INSERT INTO TEXT (name, language, text) """ \
+        #                           + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """') """ \
+        #                           + """ON CONFLICT (name, language) DO UPDATE SET text = excluded.text""")
+        #     self.conn_config.commit()
     def check_db_structure(self):
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';") 
         tabellen = self.cursor.fetchall()
@@ -626,6 +629,23 @@ class Data():
         # f.close()
         
         # self.main.add_status_message("----- Export abgeschlossen -----")
+    def fill_language_table(self):
+        if self.language == None:
+            self.language = "de"
+
+        # Change content of table TEXT (switch to texts from according i18n file content)
+        self.cursor_config.execute("DELETE FROM TEXT")
+        self.conn_config.commit()
+        filename = self.language_dir + "i18n_" + self.language + ".properties"
+        with open(filename, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line != "" and line[0] != "#":
+                    name, text = line.split("=",2)
+                    self.cursor_config.execute("""INSERT INTO TEXT (name, language, text) """ \
+                        + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """') """ \
+                        + """ON CONFLICT (name, language) DO UPDATE SET text = excluded.text""")
+        self.conn_config.commit()
     def get_ancestors(self, persID):
         ids = {persID:{"child":-1}}    # each record includes: persID: { <table INDI>, partners (list), birth, death, year, child }
         lines = []                     # each record includes: boxLeft, boxRight
@@ -713,8 +733,8 @@ class Data():
                 items.append(row[0])
 
         ok = False
-        config_name, ok = QInputDialog.getItem(self.main, self.get_text("CHOICE_PROJECT"), \
-            self.get_text("PROJECTS"), items, 0, False)
+        config_name, ok = QInputDialog.getItem(self.main, self.get_text("CHOICE_CONFIGURATION"), \
+            self.get_text("CONFIGURATIONS"), items, 0, False)
 
         if ok and config_name:
             self.config_name = config_name
@@ -1185,23 +1205,10 @@ class Data():
             self.get_text("LANGUAGES"), items, 0, False)    
         if ok:
             self.language = language
-
-            # Change content of table TEXT (switch to texts from according i18n file content)
-            self.cursor_config.execute("DELETE FROM TEXT")
-            self.conn_config.commit()
-            filename = self.language_dir + "i18n_" + self.language + ".properties"
-            with open(filename, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line != "" and line[0] != "#":
-                        name, text = line.split("=",2)
-                        self.cursor_config.execute("""INSERT INTO TEXT (name, language, text) """ \
-                            + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """') """ \
-                            + """ON CONFLICT (name, language) DO UPDATE SET text = excluded.text""")
-            self.conn_config.commit()
+            self.fill_language_table()
 
             # Change text in shown controls and table header
-            self.main.refresh_texts(self.language)
+            self.main.refresh_texts()
 
             # Store new language in config table
             self.set_conf_attribute("language", self.language)
