@@ -12,11 +12,12 @@ class Data():
         self.cursor        = None
         self.conn_config   = None
         self.cursor_config = None
+        self.config_name   = None
         self.base_dir      = os.path.dirname(__file__) + os.sep + ".." + os.sep
         self.project_dir   = self.base_dir + "data" + os.sep
         self.config_dir    = self.base_dir + "config" + os.sep
-        self.project       = None
-        self.indi_columns = [   ["id",          "INTEGER PRIMARY key"],
+        self.language_dir  = self.base_dir + "i18n" + os.sep
+        self.indi_columns  = [   ["id",          "INTEGER PRIMARY key"],
                                 ["GIVN",        "TEXT"],
                                 ["SURN",        "TEXT"],
                                 ["SEX",         "TEXT"],
@@ -36,7 +37,7 @@ class Data():
                                 ["guess_birth", "TEXT"],
                                 ["guess_death", "TEXT"]
                             ]
-        self.fam_columns  = [   ["id",          "INTEGER PRIMARY key"],
+        self.fam_columns   = [   ["id",          "INTEGER PRIMARY key"],
                                 ["HUSB",        "INTEGER"],
                                 ["WIFE",        "INTEGER"],
                                 ["MARR_DATE",   "TEXT"],
@@ -44,6 +45,8 @@ class Data():
                                 ["comment",     "TEXT"]
                             ]
         self.check_conf_db()
+        self.config_name   = self.get_config_name()
+        self.project       = self.get_conf_attribute("project")
 
     def check_conf_db(self):
         # Check existence of config subdirectory
@@ -83,8 +86,7 @@ class Data():
             
         # Check existence or create property table_columns as default
         self.set_conf_defaults()
-        self.project = self.get_project() 
-        self.language = self.get_conf_attribute("default", "language")
+        self.language = self.get_conf_attribute("language")
 
         # Fill language-dependent texts from file to DB
         found = False
@@ -93,15 +95,16 @@ class Data():
             found = True
 
         if not found:
-            filename = self.base_dir + "i18n" + os.sep + "i18n_" + self.language + ".properties"
+            filename = self.language_dir + "i18n_" + self.language + ".properties"
             if os.path.exists(filename):
                 with open(filename, "r", encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
-                        if line != "":
+                        if line != "" and line[0] != "#":
                             name, text = line.split("=",2)
                             self.cursor_config.execute("""INSERT INTO TEXT (name, language, text) """ \
-                                  + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """')""")
+                                  + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """') """ \
+                                  + """ON CONFLICT (name, language) DO UPDATE SET text = excluded.text""")
             self.conn_config.commit()
     def check_db_structure(self):
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';") 
@@ -674,20 +677,52 @@ class Data():
         for row in self.cursor.fetchall():
             list.append(row[0])
         return list
-    def get_conf_attribute(self, config_name, property):
-        if config_name:
-            query = "SELECT value FROM CONF WHERE config_name = '" + config_name + "' AND property = '" + property + "'"
-            self.cursor_config.execute(query)
-            for row in self.cursor_config.fetchall():
-                return row[0]
-        
-        if config_name in (self.project, None) and config_name != "default" and property == "table_columns":
-            fields = self.get_conf_attribute("default", "table_columns")
-            if self.project != None:
-                self.set_conf_attribute(self.project, "table_columns", fields)
-            return fields
+    def get_conf_attribute(self, property):
+        if self.config_name == None:
+            config_name = "default"
+        else:
+            config_name = self.config_name
 
+        query = "SELECT value FROM CONF WHERE config_name = '" + config_name + "' AND property = '" + property + "'"
+        self.cursor_config.execute(query)
+        for row in self.cursor_config.fetchall():
+            return row[0]
         return None
+    def get_config_name(self):
+        if self.config_name != None:
+            return self.config_name
+
+        self.cursor_config.execute("SELECT DISTINCT config_name FROM CONF")
+        rows = self.cursor_config.fetchall()
+        if len(rows) == 0:    # table CONF is empty
+            self.set_conf_defaults()
+            return "my"
+        elif len(rows) == 1:  # there is only one configuration, probably "default"
+            self.set_conf_defaults()       # Result can be 2 or 3 configurations, because table will not be deleted
+            return self.get_config_name()  # Take care, this is a RECURSION!
+        elif len(rows) == 2:
+            if rows[0][0] == "default":
+                return rows[1][0]
+            elif rows[1][0] == "default":
+                return rows[0][0]
+        
+        # there are more than one "own" configurations, choose the correct one
+        items = []
+        for row in rows:
+            if row[0] != "default":
+                items.append(row[0])
+
+        ok = False
+        config_name, ok = QInputDialog.getItem(self.main, self.get_text("CHOICE_PROJECT"), \
+            self.get_text("PROJECTS"), items, 0, False)
+
+        if ok and config_name:
+            self.config_name = config_name
+        else:
+            self.config_name = items[0]
+
+        self.main.refresh_configuration()
+        return self.config_name
     def get_descendants(self, persID):
         ids = {}                       # each record includes: persID: { <table INDI>, partners (list), birth, death, year, child }
         lines = []                     # each record includes: boxLeft, boxRight
@@ -948,7 +983,7 @@ class Data():
                 self.project = row[0]
         return self.project
     def get_table_col_fields(self):
-        fields = self.get_conf_attribute(self.project, "table_columns")
+        fields = self.get_conf_attribute("table_columns")
         fields_str = ""
         field_list = fields.split(",")
         first = True
@@ -961,7 +996,7 @@ class Data():
                 fields_str = fields_str + "," + field[0]
         return (fields_str, fields, field_list)
     def get_table_col_number(self, fieldname):
-        table_columns = self.get_conf_attribute(self.project, "table_columns")
+        table_columns = self.get_conf_attribute("table_columns")
         field_list = table_columns.split(",")
         num = -1
         for field_json in field_list:
@@ -971,12 +1006,13 @@ class Data():
                 return num
         return -1
     def get_table_col_texts(self):
-        table_columns = self.get_conf_attribute(self.project, "table_columns")
+        table_columns = self.get_conf_attribute("table_columns")
         field_list = table_columns.split(",")
         txt_list = []
         for field_json in field_list:
             field = field_json.split(":")[1]
-            txt_list.append(field)
+            field_txt = self.main.get_text(field)
+            txt_list.append(field_txt)
         return txt_list
     def get_text(self, ID):
         query = "SELECT text FROM TEXT WHERE name = '" + ID + "' AND language = '" + self.language + "'"
@@ -1060,24 +1096,24 @@ class Data():
 
         if ok and project:
             self.set_project(project)
-    def set_conf_attribute(self, config_name, property, value):
+    def set_conf_attribute(self, property, value):
         query = "UPDATE CONF SET value = '" + value + "' WHERE config_name = '" \
-              + config_name + "' AND property = '" + property + "'"
+              + self.config_name + "' AND property = '" + property + "'"
         self.cursor_config.execute(query)
         self.conn_config.commit()
 
         if self.cursor_config.rowcount == 0:
             query = "INSERT INTO CONF (config_name, property, value) VALUES ('" \
-                  + config_name + "', '" + property + "', '" + value + "')"
+                  + self.config_name + "', '" + property + "', '" + value + "')"
             self.cursor_config.execute(query)
             self.conn_config.commit()
     def set_conf_defaults(self):
         dict = {}
-        dict["table_columns"] = 'id:ID,finished:Fertig,' \
-                    + 'SURN:Nachname,birthname:geb.,GIVN:Vorname,BIRT_DATE:Geb. Datum,' \
-                    + 'BIRT_PLAC:Geb. Ort,DEAT_DATE:Tod Datum,DEAT_PLAC:Tod Ort,' \
-                    + 'father:VaterID,mother:MutterID,SEX:Geschlecht,no_child:Kinderlos,' \
-                    + 'guess_birth:Geburtsjahr geschätzt,guess_death:Todesjahr geschätzt'
+        dict["table_columns"] = 'id:ID,finished:DONE,' \
+                    + 'SURN:LASTNAME,birthname:BORN,GIVN:FIRSTNAME,BIRT_DATE:BIRTH_DATE,' \
+                    + 'BIRT_PLAC:BIRTH_PLACE,DEAT_DATE:DEATH_DATE,DEAT_PLAC:DEATH_PLACE,' \
+                    + 'father:FATHER_ID,mother:MOTHER_ID,SEX:SEX,no_child:NO_CHILD,' \
+                    + 'guess_birth:BIRTH_YEAR_ESTIMATED,guess_death:DEATH_YEAR_ESTIMATED'
         dict["language"] = "de"
 
         for property in dict:
@@ -1086,9 +1122,15 @@ class Data():
                   + """VALUES ('default', '""" + property + """', '""" + str(value) + """') """\
                   + """ON CONFLICT (config_name, property) DO UPDATE SET value = excluded.value"""
             self.cursor_config.execute(query)
+
+            query = """INSERT INTO CONF (config_name, property, value) """ \
+                  + """VALUES ('my', '""" + property + """', '""" + str(value) + """') """\
+                  + """ON CONFLICT (config_name, property) DO UPDATE SET value = excluded.value"""
+            self.cursor_config.execute(query)
+
         self.conn_config.commit()
     def set_empty_project(self):
-        self.set_conf_attribute("default", "project", "")
+        self.set_conf_attribute("project", "")
         self.project = None
         self.conn    = None
         self.cursor  = None    
@@ -1127,9 +1169,45 @@ class Data():
         else:
             self.cursor.execute("UPDATE INDI SET " + attribute + " = '" + value +"' WHERE id = " + str(persID))
         self.conn.commit()
+    def set_language(self):
+        files = os.listdir(self.language_dir)
+        list = []
+        for file in files:
+            list.append(file)
+        list.sort()
+
+        items = []
+        for file in list:
+            if file.startswith("i18n_") and file.endswith(".properties"):
+                items.append(file[5:-11])
+        
+        language, ok = QInputDialog.getItem(self.main, self.get_text("CHOICE_LANGUAGE"), \
+            self.get_text("LANGUAGES"), items, 0, False)    
+        if ok:
+            self.language = language
+
+            # Change content of table TEXT (switch to texts from according i18n file content)
+            self.cursor_config.execute("DELETE FROM TEXT")
+            self.conn_config.commit()
+            filename = self.language_dir + "i18n_" + self.language + ".properties"
+            with open(filename, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line != "" and line[0] != "#":
+                        name, text = line.split("=",2)
+                        self.cursor_config.execute("""INSERT INTO TEXT (name, language, text) """ \
+                            + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """') """ \
+                            + """ON CONFLICT (name, language) DO UPDATE SET text = excluded.text""")
+            self.conn_config.commit()
+
+            # Change text in shown controls and table header
+            self.main.refresh_texts(self.language)
+
+            # Store new language in config table
+            self.set_conf_attribute("language", self.language)
     def set_project(self, project_name):
         self.project = project_name
-        self.set_conf_attribute("default", "project", self.project)
+        self.set_conf_attribute("project", self.project)
 
         # Create / enhance project database and tables, if necessary
         db_filename = self.project_dir + project_name + ".db"

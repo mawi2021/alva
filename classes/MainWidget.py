@@ -28,7 +28,7 @@ class MainWidget(QWidget):
         self.tableW.setContentsMargins(0,0,0,0)
 
         self.persFrame = PersonWidget(self.main)
-        self.persFrame.refreshBackground()
+        self.persFrame.refresh_background()
 
         statusFrame = QFrame()
         statusFrame.setFrameShape(QFrame.StyledPanel)
@@ -80,115 +80,141 @@ class MainWidget(QWidget):
 class MainWindowMenu(QMenuBar):
     def __init__(self, parent):
         super().__init__()
+        self.main = parent
 
         # ----- F I L E ------------------------------------------------------------------------- #
-        fileMenu = self.addMenu(parent.get_text("DATA"))
+        self.fileMenu = self.addMenu(parent.get_text("DATA"))
 
         self.newProjectAction = QAction(QIcon("icons/newproject2.png"), parent.get_text("NEW"), self)
         self.newProjectAction.triggered.connect(parent.create_project)
-        fileMenu.addAction(self.newProjectAction)
+        self.fileMenu.addAction(self.newProjectAction)
 
         self.openProjectAction = QAction(QIcon("icons/openproject2.png"), parent.get_text("OPEN"), self)
         self.openProjectAction.triggered.connect(parent.select_project)
-        fileMenu.addAction(self.openProjectAction)
+        self.fileMenu.addAction(self.openProjectAction)
 
-        fileMenu.addSeparator()
+        self.fileMenu.addSeparator()
 
         self.importAction = QAction(QIcon("icons/import2.png"), parent.get_text("IMPORT"), self)
         self.importAction.triggered.connect(parent.import_action)
-        fileMenu.addAction(self.importAction)
+        self.fileMenu.addAction(self.importAction)
 
         self.exportAction = QAction(QIcon("icons/export2.png"), parent.get_text("EXPORT"), self)
         self.exportAction.triggered.connect(parent.export_action)
-        fileMenu.addAction(self.exportAction)
+        self.fileMenu.addAction(self.exportAction)
 
-        fileMenu.addSeparator()
+        self.fileMenu.addSeparator()
 
         self.exitAction = QAction(QIcon("icons/exit2.png"), parent.get_text("PROGRAM_END"), self)
         self.exitAction.triggered.connect(parent.on_exit)
-        fileMenu.addAction(self.exitAction)
+        self.fileMenu.addAction(self.exitAction)
 
         # --------------------------------------------------------------------------------------- #
-        personMenu = self.addMenu(parent.get_text("PERSON"))
+        self.personMenu = self.addMenu(parent.get_text("PERSON"))
 
         self.newPersAction = QAction(QIcon("icons/person_new.png"), parent.get_text("CREATE_PERSON"), self)
         self.newPersAction.triggered.connect(parent.create_person)
-        personMenu.addAction(self.newPersAction)
+        self.personMenu.addAction(self.newPersAction)
 
         self.copyLineAction = QAction(QIcon("icons/person_copy.png"), parent.get_text("COPY_PERSON"), self)
         self.copyLineAction.triggered.connect(parent.copy_person)
-        personMenu.addAction(self.copyLineAction)
+        self.personMenu.addAction(self.copyLineAction)
 
         self.deleteLineAction = QAction(QIcon("icons/person_delete.png"), parent.get_text("DELETE_PERSON"), self)
         self.deleteLineAction.triggered.connect(parent.delete_person)
-        personMenu.addAction(self.deleteLineAction)
+        self.personMenu.addAction(self.deleteLineAction)
 
         # --------------------------------------------------------------------------------------- #
-        statistikMenu = self.addMenu(parent.get_text("STATISTICS"))
+        self.statistikMenu = self.addMenu(parent.get_text("STATISTICS"))
 
         self.anz_pers_Action = QAction(QIcon("icons/personen.png"), parent.get_text("NUMBER_PERSON"), self)
         self.anz_pers_Action.triggered.connect(parent.statistik_person)
-        statistikMenu.addAction(self.anz_pers_Action)
+        self.statistikMenu.addAction(self.anz_pers_Action)
+
+        # --------------------------------------------------------------------------------------- #
+        self.othersMenu = self.addMenu(parent.get_text("OTHERS"))
+
+        self.langu_Action = QAction(QIcon("icons/personen.png"), parent.get_text("LANGUAGE"), self)
+        self.langu_Action.triggered.connect(parent.set_language)
+        self.othersMenu.addAction(self.langu_Action)
+    def refresh_texts(self):
+        self.fileMenu.setTitle(self.main.get_text("DATA"))
+        self.newProjectAction.setText(self.main.get_text("NEW"))
+        self.openProjectAction.setText(self.main.get_text("OPEN"))
+        self.importAction.setText(self.main.get_text("IMPORT"))
+        self.exportAction.setText(self.main.get_text("EXPORT"))
+        self.exitAction.setText(self.main.get_text("PROGRAM_END"))
+        self.personMenu.setTitle(self.main.get_text("PERSON"))
+        self.newPersAction.setText(self.main.get_text("CREATE_PERSON"))
+        self.copyLineAction.setText(self.main.get_text("COPY_PERSON"))
+        self.deleteLineAction.setText(self.main.get_text("DELETE_PERSON"))
+        self.statistikMenu.setTitle(self.main.get_text("STATISTICS"))
+        self.anz_pers_Action.setText(self.main.get_text("NUMBER_PERSON"))
+        self.othersMenu.setTitle(self.main.get_text("OTHERS"))
+        self.langu_Action.setText(self.main.get_text("LANGUAGE"))
 
 
 class MainWindowToolbars():
     def __init__(self, parent):
         super().__init__()
 
-        self.parent = parent
+        self.main = parent
 
-        #bgColor       = 'rgb(175, 254, 255)' # Türkis
-        bgColor       = 'rgb(7, 244, 247)' # Türkis
-        bgBrightColor = 'rgb(224, 255, 255)' # Türkis
+        bgColor       = 'rgb(7, 244, 247)' 
+        bgBrightColor = 'rgb(224, 255, 255)' 
 
         # ----- Left Toolbar -------------------------------------------------------------------- #
-        self.navToolBar = QToolBar(parent)
+        self.navToolBar = QToolBar(self.main)
         self.navToolBar.setIconSize(QSize(50, 50));
-        parent.addToolBar(Qt.LeftToolBarArea, self.navToolBar)
+        self.main.addToolBar(Qt.LeftToolBarArea, self.navToolBar)
         self.navToolBar.setStyleSheet('background-color:' + bgColor + ';width:50px;')
         self.navToolBar.setFixedHeight(200)
 
-        fileToolbarAction = QAction(QIcon("icons/file.png"), parent.get_text("DATA"), parent)
-        fileToolbarAction.triggered.connect(self.switch_to_file_menu)
-        self.navToolBar.addAction(fileToolbarAction)
+        self.fileToolbarAction = QAction(QIcon("icons/file.png"), self.main.get_text("DATA"), self.main)
+        self.fileToolbarAction.triggered.connect(self.switch_to_file_menu)
+        self.navToolBar.addAction(self.fileToolbarAction)
 
-        outToolbarAction = QAction(QIcon("icons/person.png"), parent.get_text("PERSON"), parent)
-        outToolbarAction.triggered.connect(self.switch_to_person_menu)
-        self.navToolBar.addAction(outToolbarAction)
+        self.outToolbarAction = QAction(QIcon("icons/person.png"), self.main.get_text("PERSON"), self.main)
+        self.outToolbarAction.triggered.connect(self.switch_to_person_menu)
+        self.navToolBar.addAction(self.outToolbarAction)
 
-        statToolbarAction = QAction(QIcon("icons/diagram.png"), parent.get_text("STATISTICS"), parent)
-        statToolbarAction.triggered.connect(self.switch_to_statistik_menu)
-        self.navToolBar.addAction(statToolbarAction)
+        self.statToolbarAction = QAction(QIcon("icons/diagram.png"), self.main.get_text("STATISTICS"), self.main)
+        self.statToolbarAction.triggered.connect(self.switch_to_statistik_menu)
+        self.navToolBar.addAction(self.statToolbarAction)
 
         # ----- 2nd Left Toolbar ---------------------------------------------------------------- #
-        self.detailToolBar = QToolBar(parent)
+        self.detailToolBar = QToolBar(self.main)
         self.detailToolBar.setIconSize(QSize(40, 40));
-        parent.addToolBar(Qt.LeftToolBarArea, self.detailToolBar)
+        self.main.addToolBar(Qt.LeftToolBarArea, self.detailToolBar)
         self.detailToolBar.setStyleSheet('background-color:' + bgBrightColor + ';width:50px;')
         self.switchDetailToolbar("Nav")
     def switchDetailToolbar(self, name):
         self.detailToolBar.clear()
 
         if name == "Nav":
-            self.detailToolBar.addAction(self.parent.menu.newProjectAction)
-            self.detailToolBar.addAction(self.parent.menu.openProjectAction)
-            self.detailToolBar.addAction(self.parent.menu.importAction)
-            self.detailToolBar.addAction(self.parent.menu.exportAction)
-            self.detailToolBar.addAction(self.parent.menu.exitAction)
+            self.detailToolBar.addAction(self.main.menu.newProjectAction)
+            self.detailToolBar.addAction(self.main.menu.openProjectAction)
+            self.detailToolBar.addAction(self.main.menu.importAction)
+            self.detailToolBar.addAction(self.main.menu.exportAction)
+            self.detailToolBar.addAction(self.main.menu.exitAction)
 
         elif name == "Person":
-            self.detailToolBar.addAction(self.parent.menu.newPersAction)
-            self.detailToolBar.addAction(self.parent.menu.copyLineAction)
-            self.detailToolBar.addAction(self.parent.menu.deleteLineAction)      
+            self.detailToolBar.addAction(self.main.menu.newPersAction)
+            self.detailToolBar.addAction(self.main.menu.copyLineAction)
+            self.detailToolBar.addAction(self.main.menu.deleteLineAction)      
 
         elif name == "Statistik":  
-            self.detailToolBar.addAction(self.parent.menu.anz_pers_Action)
+            self.detailToolBar.addAction(self.main.menu.anz_pers_Action)
     def switch_to_file_menu(self):
-        self.parent.add_status_message( "switch_to_file_menu" )  # called from MainWindowToolbars
+        self.main.add_status_message( "switch_to_file_menu" )  # called from MainWindowToolbars
         self.switchDetailToolbar("Nav")
     def switch_to_person_menu(self):
-        self.parent.add_status_message( "switch_to_person_menu" )  # called from MainWindowToolbars
+        self.main.add_status_message( "switch_to_person_menu" )  # called from MainWindowToolbars
         self.switchDetailToolbar("Person")        
     def switch_to_statistik_menu(self):
-        self.parent.add_status_message( "switch_to_person_menu" )  # called from MainWindowToolbars
+        self.main.add_status_message( "switch_to_person_menu" )  # called from MainWindowToolbars
         self.switchDetailToolbar("Statistik")    
+    def refresh_texts(self):
+        self.fileToolbarAction.setText(self.main.get_text("DATA"))
+        self.outToolbarAction.setText(self.main.get_text("PERSON"))
+        self.statToolbarAction.setText(self.main.get_text("STATISTICS"))

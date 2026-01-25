@@ -411,7 +411,7 @@ class GraphHtml(QMainWindow):
                 persID = int(element_id)
                 self.main.set_person(persID)
         except: 
-            self.main.add_status_message("ERROR: GraphHtml => on_clicked()")
+            self.main.add_status_message(self.main.get_text("ERROR") + ": GraphHtml => on_clicked()")
     def refresh_page_anc(self):
         for key in self.ids:
             root = self.ids[key]["id"]

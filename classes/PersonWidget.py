@@ -21,7 +21,7 @@ class PersonWidget(QScrollArea):
         self.navigationListBack = []
         self.ID                 = -1
         self.persLbl            = QLabel("")
-        self.clickTxt           = "<klick hier>"
+        self.clickTxt           = self.main.get_text("CLICK")
         self.childWidgetPos     = -1
 
         self.initUI()
@@ -38,20 +38,20 @@ class PersonWidget(QScrollArea):
         self.setWidgetResizable(True)
 
         # Initialize tab screen
-        qTabWidget = QTabWidget()
+        self.qTabWidget = QTabWidget()
 
         self.tabGeneral = QWidget()
         self.eSexGroup = QButtonGroup(objectName="general>sexGroup") # must be globally, otherwise no signal received
-        qTabWidget.addTab(self.tabGeneral, "Allgemein")
+        self.qTabWidget.addTab(self.tabGeneral, self.main.get_text("COMMON"))
         self.initUI_add_general_fields()
         
         self.tabParents = QWidget()
-        qTabWidget.addTab(self.tabParents, "Eltern")
+        self.qTabWidget.addTab(self.tabParents, self.main.get_text("PARENTS"))
         self.initUI_add_parents_fields()
         
         self.tabFamily  = QWidget()
         self.formFamilyLayout = QFormLayout()
-        qTabWidget.addTab(self.tabFamily, "Partner und Kinder")
+        self.qTabWidget.addTab(self.tabFamily, self.main.get_text("OWN_FAMILY"))
         self.initUI_add_family_fields()
 
         # Central Person #        
@@ -62,154 +62,170 @@ class PersonWidget(QScrollArea):
         hboxB = QHBoxLayout()
         layout.addLayout(hboxB)
 
-        self.backButton = QPushButton("🡸", self)
+        self.backButton = QPushButton(self.main.get_text("BACK"), self)
         self.backButton.clicked.connect(self._navigateBack)
         hboxB.addWidget(self.backButton)
 
-        self.addButton = QPushButton("Neue Person", self)
+        self.addButton = QPushButton(self.main.get_text("NEW_PERSON"), self)
         self.addButton.clicked.connect(self.main.create_person)
         hboxB.addWidget(self.addButton)
 
-        self.copyButton = QPushButton("Person kopieren", self)
+        self.copyButton = QPushButton(self.main.get_text("COPY_PERSON"), self)
         self.copyButton.clicked.connect(self.main.copy_person)
         hboxB.addWidget(self.copyButton)
 
-        self.ancButton = QPushButton("Vorfahren", self)
+        self.ancButton = QPushButton(self.main.get_text("ANCESTORS"), self)
         self.ancButton.clicked.connect(self.main.open_graph_ancestors)
         hboxB.addWidget(self.ancButton)
 
-        self.descButton = QPushButton("Nachfahren", self)
+        self.descButton = QPushButton(self.main.get_text("DESCENDANTS"), self)
         self.descButton.clicked.connect(self.main.open_graph_descendants)
         hboxB.addWidget(self.descButton)
 
         # Add box layout, add table to box layout and add box layout to widget
-        layout.addWidget(qTabWidget) 
+        layout.addWidget(self.qTabWidget) 
         self.setLayout(layout) 
     def initUI_add_general_fields(self):
         # for new fields also check method set_person_details()
+        globLayout = QVBoxLayout()
+
         # ----- PERSON ----- #
-        persGB         = QGroupBox("Person")
-        persGB.setStyleSheet("QGroupBox {font-weight:bold;padding-top:10px;margin:5px;}")
-        persGB.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.persGB = QGroupBox(self.main.get_text("PERSON"))
+        self.persGB.setStyleSheet("QGroupBox {font-weight:bold;padding-top:10px;margin:5px;}")
+        self.persGB.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         formPersLayout = QFormLayout()
-        persGB.setLayout(formPersLayout)
+        self.persGB.setLayout(formPersLayout)
+        globLayout.addWidget(self.persGB)
                 
         # ID
         eId = QLabel("", objectName="general>id")
-        formPersLayout.addRow("ID", eId)
+        self.eId_label = QLabel(self.main.get_text("ID"))
+        formPersLayout.addRow(self.eId_label, eId)
 
         # Finished
         eFinished = QCheckBox("", objectName="finished")
         eFinished.stateChanged.connect(partial(self.on_editing_finished, "finished"))
-        formPersLayout.addRow("Fertig", eFinished)
+        self.eFinished_label = QLabel(self.main.get_text("DONE"))
+        formPersLayout.addRow(self.eFinished_label, eFinished)
 
         # Firstname
         eFirstname = QLineEdit("", objectName="GIVN")
         eFirstname.editingFinished.connect(partial(self.on_editing_finished, "GIVN"))
-        formPersLayout.addRow("Vorname", eFirstname)
+        self.eFirstname_label = QLabel(self.main.get_text("FIRSTNAME"))
+        formPersLayout.addRow(self.eFirstname_label, eFirstname)
 
         # Surname and Birthname
         eSurname = QLineEdit("", objectName="SURN")
         eSurname.editingFinished.connect(partial(self.on_editing_finished, "SURN"))
-        lBSurname = QLabel("geb.")
+        self.eSurname_label = QLabel(self.main.get_text("BORN"))
         eBSurname = QLineEdit("", objectName="birthname")
         eBSurname.editingFinished.connect(partial(self.on_editing_finished, "birthname"))
         hboxN = QHBoxLayout()
         hboxN.addWidget(eSurname)
-        hboxN.addWidget(lBSurname)
+        hboxN.addWidget(self.eSurname_label)
         hboxN.addWidget(eBSurname)
-        formPersLayout.addRow("Nachname", hboxN)
+        self.eLastname_label = QLabel(self.main.get_text("LASTNAME"))
+        formPersLayout.addRow(self.eLastname_label, hboxN)
 
         # Sex #
         self.eSexGroup.buttonClicked.connect(self._onSexStateClicked)
-        eSexMan = QRadioButton("männlich", objectName="general>sexMan")
-        self.eSexGroup.addButton(eSexMan)
-        eSexWoman = QRadioButton("weiblich", objectName="general>sexWoman")
-        self.eSexGroup.addButton(eSexWoman)
-        eSexOhne = QRadioButton("k.A.", objectName="general>sexOhne")
-        self.eSexGroup.addButton(eSexOhne)
+        self.eSexMan = QRadioButton(self.main.get_text("MALE"), objectName="general>sexMan")
+        self.eSexGroup.addButton(self.eSexMan)
+        self.eSexWoman = QRadioButton(self.main.get_text("FEMALE"), objectName="general>sexWoman")
+        self.eSexGroup.addButton(self.eSexWoman)
+        self.eSexOhne = QRadioButton(self.main.get_text("DIVERS"), objectName="general>sexOhne")
+        self.eSexGroup.addButton(self.eSexOhne)
         hboxS = QHBoxLayout()
-        hboxS.addWidget(eSexMan)
-        hboxS.addWidget(eSexWoman)
-        hboxS.addWidget(eSexOhne)
-        formPersLayout.addRow("Geschlecht", hboxS)
+        hboxS.addWidget(self.eSexMan)
+        hboxS.addWidget(self.eSexWoman)
+        hboxS.addWidget(self.eSexOhne)
+        self.sex_label = QLabel(self.main.get_text("SEX"))
+        formPersLayout.addRow(self.sex_label, hboxS)
 
         # Birth #
+        self.BDat_label = QLabel(self.main.get_text("DATE"))
+        self.BirthDatEstim_label = QLabel(self.main.get_text("DATE_ESTIMATED"))
+        self.BPlac_label = QLabel(self.main.get_text("PLACE"))
+        self.Birth_label = QLabel(self.main.get_text("BIRTH"))
         hboxB = QHBoxLayout()
-        lBDat = QLabel("Datum (Tag.Monat.Jahr)")
-        hboxB.addWidget(lBDat)
+        hboxB.addWidget(self.BDat_label)
         eBirthDat = QLineEdit("", objectName="BIRT_DATE")
         # eBirthDat.setInputMask("00.00.0000; ")  # 0 = Pflicht-Ziffer, _ = Placeholder
         # eBirthDat.setPlaceholderText("TT.MM.JJJJ")
         eBirthDat.setFixedWidth(70)
         eBirthDat.editingFinished.connect(partial(self.on_editing_finished, "BIRT_DATE"))
         hboxB.addWidget(eBirthDat)
-        lBirthDatEstim = QLabel("     Datum geschätzt")
         eBirthDatEstim = QCheckBox("", objectName="guess_birth")
         eBirthDatEstim.stateChanged.connect(partial(self.on_editing_finished, "guess_birth"))
-        lBPlac = QLabel("     Ort")
         eBirthPlac = QLineEdit("", objectName="BIRT_PLAC")
         eBirthPlac.editingFinished.connect(partial(self.on_editing_finished, "BIRT_PLAC"))
-        hboxB.addWidget(lBirthDatEstim)
+        hboxB.addWidget(self.BirthDatEstim_label)
         hboxB.addWidget(eBirthDatEstim)
-        hboxB.addWidget(lBPlac)
+        hboxB.addWidget(self.BPlac_label)
         hboxB.addWidget(eBirthPlac)
-        formPersLayout.addRow("Geburt:", hboxB)
+        formPersLayout.addRow(self.Birth_label, hboxB)
 
         # Death #
+        self.DDat_label = QLabel(self.main.get_text("DATE"))
+        self.DeathDatEstim_label = QLabel(self.main.get_text("DATE_ESTIMATED"))
+        self.DPlac_label = QLabel(self.main.get_text("PLACE"))
+        self.Death_label = QLabel(self.main.get_text("DEATH"))
         hboxD = QHBoxLayout()
-        lDDat = QLabel("Datum (Tag.Monat.Jahr)")
-        hboxD.addWidget(lDDat)
+        hboxD.addWidget(self.DDat_label)
         eDeathDat = QLineEdit("", objectName="DEAT_DATE")
         # eDeathDat.setInputMask("00.00.0000; ")  # 0 = Pflicht-Ziffer, _ = Placeholder
         # eDeathDat.setPlaceholderText("TT.MM.JJJJ")
         eDeathDat.setFixedWidth(70)
         eDeathDat.editingFinished.connect(partial(self.on_editing_finished, "DEAT_DATE"))
-        lDeathDatEstim = QLabel("     Datum geschätzt")
         eDeathDatEstim = QCheckBox("", objectName="guess_death")
         eDeathDatEstim.stateChanged.connect(partial(self.on_editing_finished, "guess_death"))
-        lDPlac = QLabel("     Ort")
         eDeathPlac = QLineEdit("", objectName="DEAT_PLAC")
         eDeathPlac.editingFinished.connect(partial(self.on_editing_finished, "DEAT_PLAC"))
         hboxD.addWidget(eDeathDat)
-        hboxD.addWidget(lDeathDatEstim)
+        hboxD.addWidget(self.DeathDatEstim_label)
         hboxD.addWidget(eDeathDatEstim)
-        hboxD.addWidget(lDPlac)
+        hboxD.addWidget(self.DPlac_label)
         hboxD.addWidget(eDeathPlac)
-        formPersLayout.addRow("Ableben:", hboxD)
+        formPersLayout.addRow(self.Death_label, hboxD)
 
         # Comment-Types: url, comment, media, sources #
+        self.urls_label = QLabel(self.main.get_text("URLS"))
         persURLs = QTextEdit(objectName="url")
         persURLs.setAcceptRichText(False)  # => Plain-Text only
         persURLs.focusOutEvent = self.on_person_url_changed
         persURLs.setFixedHeight(200)
         persURLs.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        formPersLayout.addRow("URLs", persURLs)
+        formPersLayout.addRow(self.urls_label, persURLs)
 
+        self.comment_label = QLabel(self.main.get_text("COMMENT"))
         persComment = QTextEdit(objectName="comment")
         persComment.setAcceptRichText(False)  # => Plain-Text only
         persComment.focusOutEvent = self.on_person_comment_changed
-        formPersLayout.addRow("Kommentar", persComment)
+        formPersLayout.addRow(self.comment_label, persComment)
 
+        self.media_label = QLabel(self.main.get_text("MEDIA"))
         persMedia = QTextEdit(objectName="media")
         persMedia.setAcceptRichText(False)  # => Plain-Text only
         persMedia.focusOutEvent = self.on_person_media_changed
-        formPersLayout.addRow("Medien", persMedia)    
+        formPersLayout.addRow(self.media_label, persMedia)    
 
+        self.sources_label = QLabel(self.main.get_text("SOURCES"))
         persSource = QTextEdit(objectName="source")
         persSource.setAcceptRichText(False)  # => Plain-Text only
         persSource.focusOutEvent = self.on_person_source_changed
-        formPersLayout.addRow("Quellen", persSource)    
+        formPersLayout.addRow(self.sources_label, persSource)    
 
         # ----- PARENTS ----- #        
-        parentGB         = QGroupBox("Eltern")
-        parentGB.setStyleSheet("QGroupBox {font-weight:bold;padding-top:10px;margin:5px;}")
+        self.parentGB = QGroupBox(self.main.get_text("PARENTS"))
+        self.parentGB.setStyleSheet("QGroupBox {font-weight:bold;padding-top:10px;margin:5px;}")
         formParentLayout = QFormLayout()
-        parentGB.setLayout(formParentLayout)
+        self.parentGB.setLayout(formParentLayout)
+        globLayout.addWidget(self.parentGB)   
 
         # Father #
-        eFather           = QLabel(objectName="general>father")
-        fatherNavButton   = QPushButton("", self, objectName="general>fatherNav")
+        self.eFather_label = QLabel(self.main.get_text("FATHER"))
+        eFather = QLabel(objectName="general>father")
+        fatherNavButton = QPushButton("", self, objectName="general>fatherNav")
         hboxV = QHBoxLayout()
         hboxV.addWidget(eFather)
         eFather.mousePressEvent = partial(self._onFatherClick, eFather)
@@ -217,11 +233,12 @@ class PersonWidget(QScrollArea):
         fatherNavButton.setSizePolicy(QSizePolicy(QSizePolicy.Fixed,QSizePolicy.Fixed))
         fatherNavButton.setMaximumWidth(80)
         hboxV.addWidget(fatherNavButton)
-        formParentLayout.addRow("Vater", hboxV)
+        formParentLayout.addRow(self.eFather_label, hboxV)
 
         # Mother #
-        eMother           = QLabel(objectName="general>mother")
-        motherNavButton   = QPushButton("", self, objectName="general>motherNav")
+        self.eMother_label = QLabel(self.main.get_text("MOTHER"))
+        eMother = QLabel(objectName="general>mother")
+        motherNavButton = QPushButton("", self, objectName="general>motherNav")
         hboxM = QHBoxLayout()
         hboxM.addWidget(eMother)
         eMother.mousePressEvent = partial(self._onMotherClick, eMother)
@@ -229,21 +246,21 @@ class PersonWidget(QScrollArea):
         motherNavButton.setSizePolicy(QSizePolicy(QSizePolicy.Fixed,QSizePolicy.Fixed))
         motherNavButton.setMaximumWidth(80)
         hboxM.addWidget(motherNavButton)
-        formParentLayout.addRow("Mutter", hboxM)
+        formParentLayout.addRow(self.eMother_label, hboxM)
         
         # ----- FAMILY ----- #
-        familyGB         = QLabel("Partner und Kinder")
-        familyGB.setStyleSheet("QLabel {font-weight:bold;padding-top:10px; width:100%;}")
+        self.familyGB = QGroupBox(self.main.get_text("OWN_FAMILY"))
+        self.familyGB.setStyleSheet("QGroupBox {font-weight:bold;padding-top:10px; width:100%;}")
+        formFamilyLayout = QFormLayout()
+        self.familyGB.setLayout(formFamilyLayout)
+        globLayout.addWidget(self.familyGB)   
+
         ownFamily = QTextEdit(objectName="general>ownFamily")
         ownFamily.setStyleSheet("QTextEdit {margin:5px;padding-left:5px;}")
         ownFamily.setReadOnly(True)
+        formFamilyLayout.addWidget(ownFamily)   
         
         # ----- end ----- #
-        globLayout = QVBoxLayout()
-        globLayout.addWidget(persGB)
-        globLayout.addWidget(parentGB)   
-        globLayout.addWidget(familyGB)   
-        globLayout.addWidget(ownFamily)
         self.tabGeneral.setLayout(globLayout)
     def initUI_add_parents_fields(self):
     
@@ -265,9 +282,9 @@ class PersonWidget(QScrollArea):
         fatherNavButton.setSizePolicy(QSizePolicy(QSizePolicy.Fixed,QSizePolicy.Fixed))
         fatherNavButton.setMaximumWidth(80)
         hboxV.addWidget(fatherNavButton)
-        formParentLayout.addRow("Vater", hboxV)
+        formParentLayout.addRow(self.main.get_text("FATHER"), hboxV)
         fatherComment.focusOutEvent = self._onFatherCommentChanged
-        formParentLayout.addRow("Kommentar", fatherComment)
+        formParentLayout.addRow(self.main.get_text("COMMENT"), fatherComment)
 
         # Mother #
         hboxM = QHBoxLayout()
@@ -277,9 +294,9 @@ class PersonWidget(QScrollArea):
         motherNavButton.setSizePolicy(QSizePolicy(QSizePolicy.Fixed,QSizePolicy.Fixed))
         motherNavButton.setMaximumWidth(80)
         hboxM.addWidget(motherNavButton)
-        formParentLayout.addRow("Mutter", hboxM)
+        formParentLayout.addRow(self.main.get_text("MOTHER"), hboxM)
         motherComment.focusOutEvent = self._onMotherCommentChanged
-        formParentLayout.addRow("Kommentar", motherComment)
+        formParentLayout.addRow(self.main.get_text("COMMENT"), motherComment)
 
         self.tabParents.setLayout(formParentLayout)
     def initUI_add_family_fields(self):
@@ -303,7 +320,7 @@ class PersonWidget(QScrollArea):
         hboxMa = QHBoxLayout()
         hboxMa.addWidget(widgets["marriageDate"])
         hboxMa.addWidget(widgets["marriagePlac"])
-        self.formFamilyLayout.addRow("Hochzeit: Datum/Ort", hboxMa)
+        self.formFamilyLayout.addRow(self.main.get_text("MARRIAGE"), hboxMa)
         
         # Partner #
         hboxPar = QHBoxLayout()
@@ -313,23 +330,23 @@ class PersonWidget(QScrollArea):
         widgets["partnerNavButton"].setSizePolicy(QSizePolicy(QSizePolicy.Fixed,QSizePolicy.Fixed))
         widgets["partnerNavButton"].setMaximumWidth(80)
         hboxPar.addWidget(widgets["partnerNavButton"])
-        self.formFamilyLayout.addRow("Partner", hboxPar)
+        self.formFamilyLayout.addRow(self.main.get_text("PARTNER"), hboxPar)
         
         # Child #
         self.childWidgetPos = self.formFamilyLayout.rowCount()
         self._addChild(0, self.clickTxt, "")          
 
         # Additional Child - Button #
-        widgets["newChildButton"].setText("Zeile für weiteres Kind erstellen")
+        widgets["newChildButton"].setText(self.main.get_text("FURTHER_CHILD"))
         widgets["newChildButton"].clicked.connect(lambda xbool="", wid=widgets["newChildButton"]: self._onNewChild(xbool, wid))
-        self.formFamilyLayout.addRow("Weiteres Kind", widgets["newChildButton"])
+        self.formFamilyLayout.addRow(self.main.get_text("FURTHER_CHILD_2"), widgets["newChildButton"])
 
         # Comment on Family #
         widgets["relationComment"].textChanged.connect(lambda wid=widgets["relationComment"]: self._onEditingRelationCommentFinished(wid,0))
-        self.formFamilyLayout.addRow("Kommentar", widgets["relationComment"])
+        self.formFamilyLayout.addRow(self.main.get_text("COMMENT"), widgets["relationComment"])
 
         # Additional Family - Button #
-        newRelationship.setText("Block für weitere Familie erstellen")
+        newRelationship.setText(self.main.get_text("FURTHER_FAMILY"))
         newRelationship.clicked.connect(self._onNewRelationshipClick)
         self.formFamilyLayout.addRow("", newRelationship)
 
@@ -359,8 +376,47 @@ class PersonWidget(QScrollArea):
         self.on_editing_finished("source")
     def on_person_url_changed(self, event): 
         self.on_editing_finished("url")
-    def refreshBackground(self):
+    def refresh_background(self):
         self.setStyleSheet(self.bgColorNormal)
+    def refresh_texts(self):
+        self.clickTxt = self.main.get_text("CLICK")
+        index = self.qTabWidget.indexOf(self.tabGeneral)
+        self.qTabWidget.setTabText(index, self.main.get_text("COMMON"))
+        index = self.qTabWidget.indexOf(self.tabParents)
+        self.qTabWidget.setTabText(index, self.main.get_text("PARENTS"))
+        index = self.qTabWidget.indexOf(self.tabFamily)
+        self.qTabWidget.setTabText(index, self.main.get_text("OWN_FAMILY"))
+        self.backButton.setText(self.main.get_text("BACK"))
+        self.addButton.setText(self.main.get_text("NEW_PERSON"))
+        self.copyButton.setText(self.main.get_text("COPY_PERSON"))
+        self.ancButton.setText(self.main.get_text("ANCESTORS"))
+        self.descButton.setText(self.main.get_text("DESCENDANTS"))
+        self.persGB.setTitle(self.main.get_text("PERSON"))
+        self.eId_label.setText(self.main.get_text("ID"))
+        self.eFinished_label.setText(self.main.get_text("DONE"))
+        self.eFirstname_label.setText(self.main.get_text("FIRSTNAME"))
+        self.eSurname_label.setText(self.main.get_text("BORN"))
+        self.eLastname_label.setText(self.main.get_text("LASTNAME"))
+        self.eSexMan.setText(self.main.get_text("MALE"))
+        self.eSexWoman.setText(self.main.get_text("FEMALE"))
+        self.eSexOhne.setText(self.main.get_text("DIVERS"))
+        self.sex_label.setText(self.main.get_text("SEX"))
+        self.BDat_label.setText(self.main.get_text("DATE"))
+        self.BirthDatEstim_label.setText(self.main.get_text("DATE_ESTIMATED"))
+        self.BPlac_label.setText(self.main.get_text("PLACE"))
+        self.Birth_label.setText(self.main.get_text("BIRTH"))
+        self.DDat_label.setText(self.main.get_text("DATE"))
+        self.DeathDatEstim_label.setText(self.main.get_text("DATE_ESTIMATED"))
+        self.DPlac_label.setText(self.main.get_text("PLACE"))
+        self.Death_label.setText(self.main.get_text("DEATH"))
+        self.urls_label.setText(self.main.get_text("URLS"))
+        self.comment_label.setText(self.main.get_text("COMMENT"))
+        self.media_label.setText(self.main.get_text("MEDIA"))
+        self.sources_label.setText(self.main.get_text("SOURCES"))
+        self.parentGB.setTitle(self.main.get_text("PARENTS"))
+        self.eFather_label.setText(self.main.get_text("FATHER"))
+        self.eMother_label.setText(self.main.get_text("MOTHER"))
+        self.familyGB.setTitle(self.main.get_text("OWN_FAMILY"))
     def set_checkbox(self, fieldname):
         value = self.main.get_person_attribute(self.ID, fieldname)
         wid = self.tabGeneral.findChild(QCheckBox, fieldname)
@@ -450,7 +506,7 @@ class PersonWidget(QScrollArea):
                         else: # set texts in existing row
                             wids["childRows"][j]["childLbl"].setText(self.main.get_person_string(childID))
                             wids["childRows"][j]["childNavBtn"].setText(str(childID))
-                            wids["childRows"][j]["childDelBtn"].setText("Löschen")
+                            wids["childRows"][j]["childDelBtn"].setText(self.main.get_text("DELETE"))
                     else:
                         if j == 0: # keep first line and remove content
                             wids["childRows"][j]["childLbl"].setText(self.clickTxt)
@@ -533,7 +589,7 @@ class PersonWidget(QScrollArea):
         value = self.main.get_person_attribute(self.ID, fieldname)
         wid = self.tabGeneral.findChild(QTextEdit, fieldname)
         wid.setText(value)
-    def showSelectPersDlg(self, sex, title, exclPers, oldText, caller):
+    def show_select_person_dialog(self, sex, title, exclPers, oldText, caller):
 
         # Get person string #
         completionList = self.main.get_person_strings_for_value_help(exclPers,sex)
@@ -541,7 +597,7 @@ class PersonWidget(QScrollArea):
         # Create modal dialog #
         dlg = QInputDialog(self)
         dlg.setWindowTitle(title)
-        dlg.setLabelText('Name, Geburt, Ableben:')
+        dlg.setLabelText(self.main.get_text("PERSON_SEARCH"))
         if oldText == self.clickTxt:
             dlg.setTextValue("")    
         else:
@@ -599,10 +655,10 @@ class PersonWidget(QScrollArea):
             txt = txt + "Famile: " + str(famObj["id"])
             partnerID = famObj.get("partnerID","")
             if partnerID != "":
-                txt = txt + "<br>Partner: " + self.main.get_person_string(partnerID)
+                txt = txt + "<br>" + self.main.get_text("PARTNER") + ": " + self.main.get_person_string(partnerID)
             childrenID = famObj.get("childrenID","")
             for childID in childrenID:
-                txt = txt + "<br>Kind: " + self.main.get_person_string(childID)
+                txt = txt + "<br>" + self.main.get_text("CHILD") + ": " + self.main.get_person_string(childID)
 
         wid.setText(txt)
 
@@ -623,7 +679,7 @@ class PersonWidget(QScrollArea):
         delBtn.clicked.connect(lambda xbool="", id=txtButton: self._onDeleteChildRow(xbool, id))
         delBtn.setSizePolicy(QSizePolicy(QSizePolicy.Fixed,QSizePolicy.Fixed))
         delBtn.setMaximumWidth(80)
-        delBtn.setText("Löschen")
+        delBtn.setText(self.main.get_text("DELETE"))
 
         hboxCh = QHBoxLayout()
         hboxCh.addWidget(lbl)
@@ -634,7 +690,7 @@ class PersonWidget(QScrollArea):
                                                         "childNavBtn": navBtn,
                                                         "childDelBtn": delBtn})
 
-        self.formFamilyLayout.insertRow(self.childWidgetPos, "Kind", hboxCh)
+        self.formFamilyLayout.insertRow(self.childWidgetPos, self.main.get_text("CHILD"), hboxCh)
         self.childWidgetPos += 1
     def _deleteChildRow(self, famIdx, id):
         if len(self.famWidgetList) <= famIdx: return
@@ -678,8 +734,8 @@ class PersonWidget(QScrollArea):
                 
         # Person picker dialog and completer #
         dlg = QInputDialog(self)
-        dlg.setWindowTitle("Kind")
-        dlg.setLabelText('Name, Geburt, Ableben:')
+        dlg.setWindowTitle(self.main.get_text("CHILD"))
+        dlg.setLabelText(self.main.get_text("PERSON_SEARCH"))
         if old_text == self.clickTxt:
             dlg.setTextValue("")    
         else:
@@ -745,7 +801,7 @@ class PersonWidget(QScrollArea):
         widText = wid.text()
         
         # Show dialog #
-        ret, id, text = self.showSelectPersDlg("w", "Vater", self.ID, widText, "child")
+        ret, id, text = self.show_select_person_dialog("w", self.main.get_text("FATHER"), self.ID, widText, "child")
         
         if ret:
             widB  = self.tabGeneral.findChild(QPushButton,"general>fatherNav")
@@ -767,7 +823,7 @@ class PersonWidget(QScrollArea):
         widText = wid.text()
         
         # Show dialog #
-        ret, id, text = self.showSelectPersDlg("m", "Mutter", self.ID, widText, "child")
+        ret, id, text = self.show_select_person_dialog("m", self.main.get_text("MOTHER"), self.ID, widText, "child")
         if ret:
             widB  = self.tabGeneral.findChild(QPushButton,"general>motherNav")
             widB.setText(str(id))
@@ -787,7 +843,7 @@ class PersonWidget(QScrollArea):
     def _onNewChild(self, xbool, wid):
         self._addChild(0, self.clickTxt, "") # 0 stands for null-th partner box
     def _onNewRelationshipClick(self, event):
-        pass
+        self.widget.add_status_message("_onNewRelationshipClick - " + self.main.get_text("NOT_IMPLEMENTED"))
     def _onPartnerClick(self, wid, event):
         widText = wid.text()
 
@@ -796,7 +852,7 @@ class PersonWidget(QScrollArea):
             sex = ''
             
         # Show dialog #
-        ret, id, text = self.showSelectPersDlg(sex, "Partner", self.ID, widText, "partner")
+        ret, id, text = self.show_select_person_dialog(sex, self.main.get_text("PARTNER"), self.ID, widText, "partner")
 
         if ret:
             widB = self.tabFamily.findChild(QPushButton,"family>partnerNav0")

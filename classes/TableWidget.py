@@ -12,7 +12,7 @@ class TableWidget(QWidget):
         super().__init__()
         self.main = main
         self.table = QTableWidget()
-        self.initUI()        
+        self.init_UI()        
     def add_person(self, persID):
         data = self.main.get_person_for_table(persID)
         if not data:
@@ -100,7 +100,7 @@ class TableWidget(QWidget):
         id_col = self.main.get_table_col_number("id")
         item   = self.table.item(row, id_col)
         return int(item.text())
-    def initUI(self):
+    def init_UI(self):
         self.table.setRowCount(0)
         
         fields = self.main.get_table_field_texts()
@@ -135,6 +135,12 @@ class TableWidget(QWidget):
         id_col = self.main.get_table_col_number("id")
         persID = int(self.table.item(row, id_col).text())
         self.main.set_person(persID, False)
+    def refresh_header_texts(self):
+        fields = self.main.get_table_field_texts()
+        field_list = []
+        for field_txt in fields:
+            field_list.append(field_txt)
+        self.table.setHorizontalHeaderLabels(field_list)
     def resize_table_columns(self):
         self.table.resizeColumnsToContents()
     def select_persID(self, id):

@@ -19,9 +19,9 @@ from classes.Data               import Data
 
 # ALLGEMEIN:
 # ==========
-# Next: Konfiguration: Alle Texte in i18n Ordner in jeweiliger Sprache und nach Wahl der
-#     Sprache bzw. nach Programmstart auch in Tabelle TEXT. Default ist "de"
-# Next: PersonWidget: muss einen Scrollbalken bekommen und dafür dürfen die Widgets nicht resizable sein
+# Next: PersonWidget: muss einen Scrollbalken bekommen und dafür dürfen die Widgets nicht resizable
+#     sein; evtl. liegt das an den GroupBox-Widgets => kann umgebaut werden zu Labeln mit fixer 
+#     und gleicher Breite, dann hat man den gleichen Formular-Eindruck
 
 # - Fehler: bei Datenänderung der Person ändert sich die blaue Zeile oberhalb der Personendetails nicht
 # - Fehler: Datumsangaben in convert_date_to_hr => else-Zweig verbesssern; bzw. alles, was mit Datum und 
@@ -32,7 +32,7 @@ from classes.Data               import Data
 # - Fehler: Darstellung Baum alva aus Sicht der Kinder
 
 # - Konfiguration: Alle festen Werte, Texte, Farben, etc. in config-DB
-# - Konfiguration: Konfigurationsauswahl
+# - Konfiguration: Konfigurationsauswahl, danach Refresh der Anzeige (außer Graph)
 # - Konfiguration: Mehrere Konfigurationen; nicht abhängig vom geladenen Projekt
 # - Konfiguration: Maximales Level der angezeigten Personen im Vorfahren-/Nachfahren-Graph
 # - Konfiguration: Möglichkeiten der Konfiguration immer dort, wo sie wirken, also als kleine Zahnräder
@@ -41,8 +41,6 @@ from classes.Data               import Data
 #     werden muss, z.B. Speichern des letzten Einlesens und dann Vergleich mit i18n-Datei-Änderungszeit
 
 # - PersonWidget: Statt Buttons Vor-/Nachfahren eine Popdown-Liste aller verfügbaren Arten, Bäume zu malen
-#     sein; evtl. liegt das an den GroupBox-Widgets => kann umgebaut werden zu Labeln mit fixer 
-#     und gleicher Breite, dann hat man den gleichen Formular-Eindruck
 
 # - Graph: Texte => Wenn Datum geschätzt, dann Angabe "um <jahr>" statt "am <datum>"
 # - Graph: Nachfahren wieder mit Ehe-Block / anderem Kindeselternteil unter der Person
@@ -280,6 +278,17 @@ class Main(QMainWindow):
         anc_list, line_list, min_year, max_year = self.get_descendants()
         graph = self.graphList.add_graph_descendant_html(anc_list, line_list, min_year, max_year)
         graph.show() 
+    def refresh_configuration(self):
+        # self.menu.refresh_configuration()
+        # self.toolbars.refresh_configuration()
+        # self.detailWidget.refresh_configuration()
+        # self.tableWidget.refresh_configuration()
+        pass
+    def refresh_texts(self):
+        self.menu.refresh_texts()
+        self.toolbars.refresh_texts()
+        self.detailWidget.refresh_texts()
+        self.tableWidget.refresh_header_texts()
     def resize_table_columns(self):
         self.tableWidget.resize_table_columns()
     def select_project(self):
@@ -294,6 +303,8 @@ class Main(QMainWindow):
         self.data.set_indi_attribute(persID, "finished", value)
     def set_husband(self, famID, husband):
         self.data.set_fam_attribute(famID, "HUSB", husband)
+    def set_language(self):
+        self.data.set_language()
     def set_marriage_date(self, persID, idx, value):
         marr = self.data.get_marriage(persID, idx)
         if "id" in marr:
@@ -389,6 +400,8 @@ if __name__ == "__main__":
 # - Numerierung beachtet "Löcher"
 # - Hintergrundbild für gesamten Baum (verzerrt)
 # - StatusWidget: anklemmen und dort alle Nachrichten ausgeben (alle print() ersetzt)
+# - Konfiguration: Alle Texte in i18n Ordner in Deutsch und Englisch
+# - Konfiguration: Wahl der Sprache => Texte aus i18n in DB-Tabelle TEXT. Default ist "de"; Datenbank: config.db
 
 
 # - Genealogie-Software (nach Nutzung im Genealogie-Projekt [Häufigkeit 2025])
