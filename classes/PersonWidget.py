@@ -261,17 +261,15 @@ class PersonWidget(QWidget):  # QScrollArea
         
         # ----- FAMILY ----- #
         self.familyGB = QGroupBox(self.main.get_text("OWN_FAMILY"))
-        self.familyGB.setStyleSheet("QGroupBox {font-weight:bold;padding-top:10px; width:100%;}")
-        formFamilyLayout = QFormLayout()
-        self.familyGB.setLayout(formFamilyLayout)
-        globLayout.addWidget(self.familyGB)   
+        self.familyGB.setStyleSheet("QGroupBox {font-weight:bold;padding-top:10px;margin:5px;}")
+        familyLayout = QVBoxLayout()
+        self.familyGB.setLayout(familyLayout)
 
         ownFamily = QTextEdit(objectName="general>ownFamily")
-        ownFamily.setStyleSheet("QTextEdit {margin:5px;padding-left:5px;}")
         ownFamily.setReadOnly(True)
-        ownFamily.setFixedHeight(100)
-        ownFamily.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        formFamilyLayout.addWidget(ownFamily)   
+        ownFamily.setStyleSheet("QTextEdit {border:none;}") # remove dounble frame
+        familyLayout.addWidget(ownFamily)
+        globLayout.addWidget(self.familyGB)   
         
         # ----- end ----- #
         self.tabGeneral.setLayout(globLayout)
@@ -542,6 +540,7 @@ class PersonWidget(QWidget):  # QScrollArea
                 # Comment #
                 wids["relationComment"].setText(famDetails.get("comment",""))
                 break   # only first family taken into consideration
+
             
         else:
             # all fields empty #
@@ -667,6 +666,7 @@ class PersonWidget(QWidget):  # QScrollArea
     def update_own_family_in_general_tab(self):  # updates General tab field "Partner und Kinder"
         wid = self.tabGeneral.findChild(QTextEdit,"general>ownFamily")  #Read Only Widget
         famList = self.main.get_family_as_adult(self.ID)
+        children = self.main.get_children(self.ID)
         txt = ""
         first = True
 
@@ -676,13 +676,30 @@ class PersonWidget(QWidget):  # QScrollArea
             else:
                 first = False
 
-            txt = txt + "Famile: " + str(famObj["id"])
+            txt = txt + self.main.get_text("FAMILY") + ": " + str(famObj["id"])
             partnerID = famObj.get("partnerID","")
             if partnerID != "":
                 txt = txt + "<br>" + self.main.get_text("PARTNER") + ": " + self.main.get_person_string(partnerID)
             childrenID = famObj.get("childrenID","")
             for childID in childrenID:
                 txt = txt + "<br>" + self.main.get_text("CHILD") + ": " + self.main.get_person_string(childID)
+                children.remove(childID)                
+
+        # Children, where parents were not married #
+        if len(children) > 0:
+            txt = txt + "<p>"
+            for childID in children:
+                txt = txt + self.main.get_text("CHILD") + ": " + self.main.get_person_string(childID)
+
+                parentID = self.main.get_mother(childID)
+                if parentID == self.ID:
+                    parentID = self.main.get_father(childID)
+                    parent_txt = self.main.get_text("FATHER")
+                else:
+                    parent_txt = self.main.get_text("MOTHER")
+                if parentID != -1:
+                    txt = txt + " (" + parent_txt + ": " + self.main.get_name_full(parentID) + ")"
+                txt = txt + "<br>"
 
         wid.setText(txt)
 

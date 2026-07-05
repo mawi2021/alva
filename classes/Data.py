@@ -673,7 +673,7 @@ class Data():
                 except:
                     ids[key]["year"] = -1
             else:
-                ids[key]["year"] = ids[ids[key]["child"]]["year"] - 25
+                ids[key]["year"] = ids[ids[key]["child"]]["year"] - 20
         return (ids, lines, min_year, max_year)
     def get_central(self, persID):
         ids1, lines1, min_year, _ = self.get_ancestors(persID, 3)
