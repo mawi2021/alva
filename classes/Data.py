@@ -13,7 +13,7 @@ class Data():
         self.conn_config   = None
         self.cursor_config = None
         self.config_name   = None
-        self.base_dir      = os.path.dirname(__file__) + os.sep + ".." + os.sep
+        self.base_dir      = os.getcwd() + os.sep
         self.project_dir   = self.base_dir + "data" + os.sep
         self.config_dir    = self.base_dir + "config" + os.sep
         self.language_dir  = self.base_dir + "i18n" + os.sep
@@ -89,26 +89,6 @@ class Data():
         # Check existence or create property table_columns as default
         if not found_conf or not found_text:
             self.set_conf_defaults()
-        # self.language = self.get_conf_attribute("language")
-
-        # # Fill language-dependent texts from file to DB
-        # found = False
-        # self.cursor_config.execute("SELECT name FROM TEXT WHERE language = '" + self.language + "' LIMIT 1")
-        # for row in self.cursor_config.fetchall():
-        #     found = True
-
-        # if not found:
-        #     filename = self.language_dir + "i18n_" + self.language + ".properties"
-        #     if os.path.exists(filename):
-        #         with open(filename, "r", encoding="utf-8") as f:
-        #             for line in f:
-        #                 line = line.strip()
-        #                 if line != "" and line[0] != "#":
-        #                     name, text = line.split("=",2)
-        #                     self.cursor_config.execute("""INSERT INTO TEXT (name, language, text) """ \
-        #                           + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """') """ \
-        #                           + """ON CONFLICT (name, language) DO UPDATE SET text = excluded.text""")
-        #     self.conn_config.commit()
     def check_db_structure(self):
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';") 
         tabellen = self.cursor.fetchall()
@@ -203,7 +183,7 @@ class Data():
                                 self.set_fam_attribute(famID, key, family[key])
                             elif key == "MARR":
                                 for sub_key in family[key]:
-                                    self.set_fam_attribute(persID, "MARR_" + sub_key, family[key][sub_key])
+                                    self.set_fam_attribute(famID, "MARR_" + sub_key, family[key][sub_key])
                             elif key == "CHIL":
                                 children = family[key]
                             else:
@@ -374,7 +354,7 @@ class Data():
         while True:
             if not ok: return None
 
-            fileName = self.project_dir + os.sep + projectName + ".db"
+            fileName = self.project_dir + projectName + ".db"
 
             if os.path.isfile(fileName): 
                 txt = proj_txt + " " + projectName + \
@@ -390,7 +370,8 @@ class Data():
 
         self.main.clear_widgets()
         self.project = projectName
-        self.main.setWindowTitle("Alva - " + projectName)  
+        self.set_conf_attribute("project", self.project)
+        self.main.setWindowTitle(self.get_window_title())  
 
         # Create database file and create tables #
         self.create_db(projectName)
@@ -646,7 +627,7 @@ class Data():
                         + """VALUES ('""" + name + """', '""" + self.language + """', '""" + text + """') """ \
                         + """ON CONFLICT (name, language) DO UPDATE SET text = excluded.text""")
         self.conn_config.commit()
-    def get_ancestors(self, persID):
+    def get_ancestors(self, persID, level=1000):
         ids = {persID:{"child":-1}}    # each record includes: persID: { <table INDI>, partners (list), birth, death, year, child }
         lines = []                     # each record includes: boxLeft, boxRight
         min_year = -1
@@ -655,8 +636,12 @@ class Data():
             return (ids, lines, min_year, max_year)
 
         # sequence is important, therefore, add a helper array 
-        helper = [{"id":persID,"child":-1}]
+        helper = [{"id":persID,"child":-1,"level":0}]
         while len(helper) > 0:
+            if helper[0]["level"] > level:
+                helper.pop(0)
+                continue
+
             key = helper[0]["id"]
             person = self.get_person(key)
             ids[key] = person
@@ -664,16 +649,17 @@ class Data():
             ids[key]["partners"]  = self.get_partners_blood(key)
             ids[key]["birth"]     = self.main.get_date_line(ids[key]["BIRT_DATE"], ids[key]["BIRT_PLAC"], "*")
             ids[key]["death"]     = self.main.get_date_line(ids[key]["DEAT_DATE"], ids[key]["DEAT_PLAC"], "†")
+            tmp_level = helper[0]["level"] + 1
             helper.pop(0)
 
             # father
             if ids[key]["father"] != -1:
-                helper.insert(0, {"id":ids[key]["father"], "child":key})
+                helper.insert(0, {"id":ids[key]["father"], "child":key, "level":tmp_level})
                 lines.append({"boxLeft":key, "boxRight":ids[key]["father"]})
 
             # mother
             if ids[key]["mother"] != -1:
-                helper.insert(0, {"id":ids[key]["mother"], "child":key})
+                helper.insert(0, {"id":ids[key]["mother"], "child":key, "level":tmp_level})
                 lines.append({"boxLeft":key, "boxRight":ids[key]["mother"]})
 
             # year of birth, min_year, max_year
@@ -687,8 +673,13 @@ class Data():
                 except:
                     ids[key]["year"] = -1
             else:
-                ids[key]["year"] = -1
+                ids[key]["year"] = ids[ids[key]["child"]]["year"] - 25
         return (ids, lines, min_year, max_year)
+    def get_central(self, persID):
+        ids1, lines1, min_year, _ = self.get_ancestors(persID, 3)
+        ids2, lines2, _, max_year = self.get_descendants(persID, 3)
+        lines = lines1 + lines2
+        return (ids1, ids2, lines, min_year, max_year)
     def get_children(self, persID):
         if persID == -1:
             return []
@@ -743,7 +734,7 @@ class Data():
 
         self.main.refresh_configuration()
         return self.config_name
-    def get_descendants(self, persID):
+    def get_descendants(self, persID, level = 1000):
         ids = {}                       # each record includes: persID: { <table INDI>, partners (list), birth, death, year, child }
         lines = []                     # each record includes: boxLeft, boxRight
         min_year = -1
@@ -752,8 +743,12 @@ class Data():
             return (ids, lines, min_year, max_year)
 
         # sequence is important, therefore, add a helper array 
-        helper = [{"id":persID}]
+        helper = [{"id":persID,"level":0}]
         while len(helper) > 0:
+            if helper[0]["level"] > level:
+                helper.pop(0)
+                continue
+
             key = helper[0]["id"]
             person = self.get_person(key)
             ids[key] = person
@@ -761,10 +756,11 @@ class Data():
             ids[key]["partners"]  = self.get_partners_blood(key)
             ids[key]["birth"]     = self.main.get_date_line(ids[key]["BIRT_DATE"], ids[key]["BIRT_PLAC"], "*")
             ids[key]["death"]     = self.main.get_date_line(ids[key]["DEAT_DATE"], ids[key]["DEAT_PLAC"], "†")
+            tmp_level = helper[0]["level"] + 1
             helper.pop(0)
 
             for child in ids[key]["children"]:
-                helper.insert(0, {"id":child})
+                helper.insert(0, {"id":child, "level":tmp_level})
                 lines.append({"boxLeft":child, "boxRight":key})  # sequence of boxes is important for line drawing
 
             # year of birth, min_year, max_year
@@ -1039,6 +1035,10 @@ class Data():
         self.cursor_config.execute(query)
         for row in self.cursor_config.fetchall():
             return row[0]
+    def get_window_title(self):
+        if self.project == None:
+            return "Alva (" + self.get_text("NO_OPEN_PROJECT") + ')'
+        return "Alva -> " + self.get_text("PROJECT") + ' "' + self.project + '"'
     def import_data(self):
         # ----- Get Filename, which is to be imported ----- #
         fileDlg = QFileDialog()
@@ -1081,7 +1081,7 @@ class Data():
         if len(data) > 0:
             self.main.tableWidget.fill_table(data)
         else:
-            self.widget.clear_widgets()
+            self.main.clear_widgets()
 
         QMessageBox.information(self.main, \
             self.get_text("CONVERSION_FINISHED"), \
@@ -1094,7 +1094,10 @@ class Data():
         else:
             self.set_project(self.project)
     def on_exit(self):
-        self.conn.close()
+        if self.conn:
+            self.conn.close()
+        if self.conn_config:
+            self.conn_config.close()
     def select_project(self):                            # asks for project from list of existing projects
         # Search for files in data subdirectory
         items = []
@@ -1154,7 +1157,7 @@ class Data():
         self.project = None
         self.conn    = None
         self.cursor  = None    
-        self.main.setWindowTitle("Alva (" + self.get_text("NO_OPEN_PROJECT") + ")")  
+        self.main.setWindowTitle(self.get_window_title())  
         self.main.close_graphs()   # In case, graphs are open, windows are closed
         self.main.clear_widgets()  # Empty other Widgets
     def set_fam_attribute(self, famID, attribute, value):
@@ -1216,6 +1219,10 @@ class Data():
         self.project = project_name
         self.set_conf_attribute("project", self.project)
 
+        # Check existence of data subdirectory
+        if not os.path.exists(self.project_dir):
+            os.makedirs(self.project_dir)
+
         # Create / enhance project database and tables, if necessary
         db_filename = self.project_dir + project_name + ".db"
         if not os.path.exists(db_filename):
@@ -1225,7 +1232,7 @@ class Data():
         self.cursor = self.conn.cursor()
         self.check_db_structure()
     
-        self.main.setWindowTitle("Alva -> " + self.get_text("PROJECT") + ' "' + project_name + '"')  
+        self.main.setWindowTitle(self.get_window_title())  
 
         # In case, graphs are open, windows are closed
         self.main.close_graphs()

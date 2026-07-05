@@ -2,9 +2,13 @@
 .git/*
 .venv/*
 .vscode/*
+build/*
 classes/__pycache__/*
 config/*
+config*/*
 data/*
+data*/*
+dist/*
 icons/*.xcf
-logs/*
 .gitignore
+alva.spec

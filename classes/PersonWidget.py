@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import QTabWidget, QVBoxLayout, QWidget, QLabel, QLineEdit, QFormLayout, \
                             QHBoxLayout, QVBoxLayout, QPushButton, QTextEdit, QRadioButton, \
                             QButtonGroup, QCompleter, QInputDialog, QDialog, QSizePolicy, \
-                            QGroupBox, QCheckBox, QScrollArea
+                            QGroupBox, QCheckBox, QScrollArea, QComboBox
 from PyQt5.QtCore    import *
 from functools       import partial
 
@@ -15,7 +15,6 @@ class PersonWidget(QWidget):  # QScrollArea
 
         self.navigationListBack = []
         self.ID                 = -1
-        self.persLbl            = QLabel("")
         self.clickTxt           = self.main.get_text("CLICK")
         self.childWidgetPos     = -1
 
@@ -24,12 +23,39 @@ class PersonWidget(QWidget):  # QScrollArea
     def get_ID(self):
         return self.ID
     def initUI(self):
-        # content_widget = QWidget()   
-        layout         = QVBoxLayout(self)   # (content_widget)
-        # self.setWidget(content_widget)
-        # self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        # self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded) 
-        # self.setWidgetResizable(True)
+        layout = QVBoxLayout(self)  
+
+        # Central Person - Big line above all #        
+        self.persLbl = QLabel("")
+        self.persLbl.setStyleSheet("background-color:rgb(128,255,255);padding:10px;font-weight:bold;font-size:12px;border:1px solid gray;")
+        layout.addWidget(self.persLbl)
+
+        # Button Line above Tab Widget
+        hboxB = QHBoxLayout()
+        layout.addLayout(hboxB)
+
+        self.backButton = QPushButton(self.main.get_text("BACK"), self)
+        self.backButton.clicked.connect(self._navigateBack)
+        hboxB.addWidget(self.backButton)
+
+        self.addButton = QPushButton(self.main.get_text("NEW_PERSON"), self)
+        self.addButton.clicked.connect(self.main.create_person)
+        hboxB.addWidget(self.addButton)
+
+        self.copyButton = QPushButton(self.main.get_text("COPY_PERSON"), self)
+        self.copyButton.clicked.connect(self.main.copy_person)
+        hboxB.addWidget(self.copyButton)
+
+        self.graph_combo = QComboBox()                               # Graphs
+        self.graph_combo.addItems([self.main.get_text("ANCESTORS"), 
+                                   self.main.get_text("DESCENDANTS"),
+                                   self.main.get_text("CENTRAL")])
+        self.graph_combo.setStyleSheet("color:black;")
+        hboxB.addWidget(self.graph_combo)
+
+        self.graph_btn = QPushButton(self.main.get_text("SHOW_GRAPH"), self)
+        self.graph_btn.clicked.connect(self.open_graph)
+        hboxB.addWidget(self.graph_btn)
 
         # Initialize tab screen
         self.qTabWidget = QTabWidget()
@@ -58,34 +84,6 @@ class PersonWidget(QWidget):  # QScrollArea
         scroll_area3.setWidget(self.tabFamily)
         self.qTabWidget.addTab(scroll_area3, self.main.get_text("OWN_FAMILY"))
         self.initUI_add_family_fields()
-
-        # Central Person #        
-        layout.addWidget(self.persLbl)
-        self.persLbl.setStyleSheet("background-color:rgb(128,255,255);padding:10px;font-weight:bold;font-size:12px;border:1px solid gray;")
-
-        # Button Line above Tab Widget
-        hboxB = QHBoxLayout()
-        layout.addLayout(hboxB)
-
-        self.backButton = QPushButton(self.main.get_text("BACK"), self)
-        self.backButton.clicked.connect(self._navigateBack)
-        hboxB.addWidget(self.backButton)
-
-        self.addButton = QPushButton(self.main.get_text("NEW_PERSON"), self)
-        self.addButton.clicked.connect(self.main.create_person)
-        hboxB.addWidget(self.addButton)
-
-        self.copyButton = QPushButton(self.main.get_text("COPY_PERSON"), self)
-        self.copyButton.clicked.connect(self.main.copy_person)
-        hboxB.addWidget(self.copyButton)
-
-        self.ancButton = QPushButton(self.main.get_text("ANCESTORS"), self)
-        self.ancButton.clicked.connect(self.main.open_graph_ancestors)
-        hboxB.addWidget(self.ancButton)
-
-        self.descButton = QPushButton(self.main.get_text("DESCENDANTS"), self)
-        self.descButton.clicked.connect(self.main.open_graph_descendants)
-        hboxB.addWidget(self.descButton)
 
         # Add box layout, add table to box layout and add box layout to widget
         layout.addWidget(self.qTabWidget) 
@@ -393,6 +391,16 @@ class PersonWidget(QWidget):  # QScrollArea
         self.on_editing_finished("source")
     def on_person_url_changed(self, event): 
         self.on_editing_finished("url")
+    def open_graph(self):
+        index = self.graph_combo.currentIndex()
+        if index == 0:
+            self.main.open_graph_ancestors()
+        elif index == 1:
+            self.main.open_graph_descendants()
+        elif index == 2:
+            self.main.open_graph_central()
+        else:    
+            self.main.add_status_message(self.main.get_text("NOT_IMPLEMENTED"))
     def refresh_background(self):
         self.setStyleSheet(self.bgColorNormal)
     def refresh_texts(self):
@@ -403,8 +411,10 @@ class PersonWidget(QWidget):  # QScrollArea
         self.backButton.setText(self.main.get_text("BACK"))
         self.addButton.setText(self.main.get_text("NEW_PERSON"))
         self.copyButton.setText(self.main.get_text("COPY_PERSON"))
-        self.ancButton.setText(self.main.get_text("ANCESTORS"))
-        self.descButton.setText(self.main.get_text("DESCENDANTS"))
+        self.graph_btn.setText(self.main.get_text("SHOW_GRAPH"))
+        self.graph_combo.clear(); self.graph_combo.addItems([self.main.get_text("ANCESTORS"), 
+                                                             self.main.get_text("DESCENDANTS"),
+                                                             self.main.get_text("CENTRAL")])
         self.persGB.setTitle(self.main.get_text("PERSON"))
         self.eId_label.setText(self.main.get_text("ID"))
         self.eFinished_label.setText(self.main.get_text("DONE"))
@@ -635,15 +645,15 @@ class PersonWidget(QWidget):  # QScrollArea
                     if sex == "m": # stands for: except man
                         self.main.delete_father(self.ID)
                     else: # is "w" and stands for: except woman
-                        self.main.delete_father(self.ID)
+                        self.main.delete_mother(self.ID)
                 elif caller == "partner":
                     pass
                 return True, "", self.clickTxt
-                
+
             pos    = text.find(":")
             persID = int(text[3:pos])
             text   = text[pos+2:]
-            
+
             if caller == 'child':
                 if sex == "m": # stands for: except man
                     self.main.set_person_attribute(self.ID, "mother", persID)
@@ -857,7 +867,7 @@ class PersonWidget(QWidget):  # QScrollArea
     def _onNewChild(self, xbool, wid):
         self._addChild(0, self.clickTxt, "") # 0 stands for null-th partner box
     def _onNewRelationshipClick(self, event):
-        self.widget.add_status_message("_onNewRelationshipClick - " + self.main.get_text("NOT_IMPLEMENTED"))
+        self.main.add_status_message("_onNewRelationshipClick - " + self.main.get_text("NOT_IMPLEMENTED"))
     def _onPartnerClick(self, wid, event):
         widText = wid.text()
 
@@ -885,13 +895,13 @@ class PersonWidget(QWidget):  # QScrollArea
                 else:
                     fid = fid_arr[0]  # TODO: Welche Familie ist richtig? Bei mehreren Ehen ist das nicht klar
 
-                ret, sex_partner = self.main.get_sex(id)
+                sex_partner = self.main.get_sex(id)
                 if ( sex == '' or sex == 'm' or sex_partner == 'w' ) and sex_partner != 'm':
                     self.main.set_wife(fid, id)
-                    self.main.set_husband(fid,self.ID)
+                    self.main.set_husband(fid, self.ID)
                 else:
-                    self.main.set_husband(fid,id)
-                    self.main.set_wife(fid,self.ID)
+                    self.main.set_husband(fid, id)
+                    self.main.set_wife(fid, self.ID)
 
             else:   # Assignment deleted
                 if len(fid_arr) > 0:

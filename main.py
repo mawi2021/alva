@@ -1,4 +1,4 @@
-# Doku: https://alva.ur-ahn.de/
+# Doku: https://alva.ur-ahn.de/      # Alva: (A)hnen(l)isten (v)on (a)llen
 import sys
 from datetime import datetime
 from PyQt5.QtWidgets            import QApplication, QMainWindow, QStyleFactory, QMessageBox
@@ -16,9 +16,16 @@ from classes.Data               import Data
 #   python -m venv .venv
 #   .venv\Scripts\Activate.ps1
 #   pip install -r requirements.txt
+# Script >> EXE:
+#   python -m PyInstaller --onefile --name alva main.py
+
 
 # ALLGEMEIN:
 # ==========
+
+# NEXT: - Graph "center" als Mix aus Vor- und Nachfahren: nur bestimmte Anzahl Generationen
+# NEXT: - Update Documentation (and remove such parts from code)
+# NEXT: - Table: Search of certain person
 
 # - Fehler: bei Datenänderung der Person ändert sich die blaue Zeile oberhalb der Personendetails 
 #     nicht im PersonWidget
@@ -31,14 +38,15 @@ from classes.Data               import Data
 
 # - Konfiguration: Alle festen Werte, Texte, Farben, etc. in config-DB
 # - Konfiguration: Konfigurationsauswahl, danach Refresh der Anzeige (außer Graph)
-# - Konfiguration: Mehrere Konfigurationen; nicht abhängig vom geladenen Projekt
 # - Konfiguration: Maximales Level der angezeigten Personen im Vorfahren-/Nachfahren-Graph
 # - Konfiguration: Möglichkeiten der Konfiguration immer dort, wo sie wirken, also als kleine Zahnräder
 #     plus eine Stelle für alle diese Teil-Konfigurationen
 # - Konfiguration: eine Mechanik einbauen, anhand derer geprüft wird, ob die Text-DB neu aufgebaut 
 #     werden muss, z.B. Speichern des letzten Einlesens und dann Vergleich mit i18n-Datei-Änderungszeit
 
-# - PersonWidget: Statt Buttons Vor-/Nachfahren eine Popdown-Liste aller verfügbaren Arten, Bäume zu malen
+# - PersonWidget: Baum-arten modularisier-/leicht erweiterbar machen
+
+# - Table: Reordering columns and saving in own configuration
 
 # - Graph: Texte => Wenn Datum geschätzt, dann Angabe "um <jahr>" statt "am <datum>"
 # - Graph: Nachfahren wieder mit Ehe-Block / anderem Kindeselternteil unter der Person
@@ -49,6 +57,7 @@ from classes.Data               import Data
 #     (dynamische Höhe der Box), von dort 30(?) Pixel lange Strich nach unten oder Beginn
 #     der schrägen Linie
 # - Graph: Kinder nach Alter sortieren
+# - Graph: bei neuer Person in der Grafik entweder neu oder aus vorhandener Liste auswählen
 
 # - Feature: Ausgabe "grafisch" als Text, A4 (ggf. mit LaTeX?)
 # - Feature: Checks: Personen mit Info, zu welchen Stammbäumen sie ghören, also ob sie mit den 
@@ -75,7 +84,7 @@ from classes.Data               import Data
 #     zeigen als separater Tab mit Controls entsprechend Definition des Feldes
 # - Feature: eine PersonID zu einer anderen ID ändern und alle Abhängigkeiten mit betrachten
 
-# - Documentation: write and keep up-to-date => https://alva.ur-ahn.de/
+# - Documentation: write and keep up-to-date
 
 class Main(QMainWindow):
     # Constraints:
@@ -96,13 +105,13 @@ class Main(QMainWindow):
         self.graphList    = GraphList(self)
         self.tableWidget  = self.widget.tableW
         self.detailWidget = self.widget.persFrame
-        self.menu         = MainWindowMenu(self) # used in MainWindowToolbars
+        self.menu         = MainWindowMenu(self) 
         self.toolbars     = MainWindowToolbars(self)
 
         self.setCentralWidget(self.widget)
         self.widget.setGraphList(self.graphList)
         self.setMenuBar(self.menu)
-        self.setWindowTitle("Alva")  # Alva: (A)hnen(l)isten (v)on (a)llen
+        self.setWindowTitle(self.data.get_window_title())  
         self.setGeometry(self.widget.left, self.widget.top, self.widget.width, self.widget.height)
 
         QApplication.setCursorFlashTime(0)  # 0 = no cursor blinking in all widgets
@@ -174,6 +183,8 @@ class Main(QMainWindow):
         dat = person["BIRT_DATE"]
         plc = person["BIRT_PLAC"]
         return self.get_date_line(dat, plc, "*")
+    def get_central(self):
+        return self.data.get_central(self.detailWidget.get_ID())
     def get_children(self, persID):
         return self.data.get_children(persID)
     def get_date_line(self, date, place, sign):
@@ -267,10 +278,13 @@ class Main(QMainWindow):
     def on_exit(self):
         self.widget.add_status_message("on_exit")
         self.data.on_exit()
-        self.conf.on_exit()
     def open_graph_ancestors(self):
         anc_list, line_list, min_year, max_year = self.get_ancestors()
         graph = self.graphList.add_graph_ancestor_html(anc_list, line_list, min_year, max_year)
+        graph.show()
+    def open_graph_central(self):
+        anc, desc, lines, min_year, max_year = self.get_central()
+        graph = self.graphList.add_graph_central_html(anc, desc, lines, min_year, max_year)
         graph.show()
     def open_graph_descendants(self):
         anc_list, line_list, min_year, max_year = self.get_descendants()
@@ -287,6 +301,7 @@ class Main(QMainWindow):
         self.toolbars.refresh_texts()
         self.detailWidget.refresh_texts()
         self.tableWidget.refresh_header_texts()
+        self.setWindowTitle(self.data.get_window_title())
     def resize_table_columns(self):
         self.tableWidget.resize_table_columns()
     def select_project(self):
@@ -398,6 +413,9 @@ if __name__ == "__main__":
 # - Konfiguration: Alle Texte in i18n Ordner in Deutsch und Englisch
 # - Konfiguration: Wahl der Sprache => Texte aus i18n in DB-Tabelle TEXT. Default ist "de"; Datenbank: config.db
 # - PersonWidget: muss einen Scrollbalken bekommen und dafür dürfen die Widgets nicht resizable sein
+# - Konfiguration: Mehrere Konfigurationen; nicht abhängig vom geladenen Projekt
+# - PersonWidget: Statt Buttons Vor-/Nachfahren eine Popdown-Liste aller verfügbaren Arten, Bäume zu malen
+# - Fehler: bei 1. Neustart und Anlage neues Projekt wird dieses nicht als Default gespeichert
 
 
 # - Genealogie-Software (nach Nutzung im Genealogie-Projekt [Häufigkeit 2025])

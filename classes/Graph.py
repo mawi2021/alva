@@ -8,16 +8,15 @@ import webbrowser
 
 class GraphHtml(QMainWindow):   
     # ----- Read GUI Content from UI File ---------------------------- *
-    def __init__(self, main, idList, lineList, minYear, maxYear, mode):
+    def __init__(self, main, idList, lineList, minYear, maxYear, mode, idList2=None):
         super().__init__()
   
         self.main       = main
-
         self.ids        = idList
+        self.ids2       = idList2
         self.lines      = lineList
         self.minYear    = minYear
         self.maxYear    = maxYear
-        self.mode       = mode
         
         self.lineHeight     = 14
         self.margin         = 10
@@ -34,9 +33,13 @@ class GraphHtml(QMainWindow):
         self.rechtwinklig   = True   # waagerechte und senkrechte Verbinder
 
         if mode == "ancestor":
-            self.calc_coords_anc()
+            self.calc_coords_anc(self.ids)
+        elif mode == "descendant":
+            self.calc_coords_desc(self.ids)
+        elif mode == "central":
+            self.calc_coords_central(self.ids, self.ids2)
         else:
-            self.calc_coords_desc()
+            return
 
         self.window = QWebEngineView()
         self.setCentralWidget(self.window)
@@ -50,19 +53,21 @@ class GraphHtml(QMainWindow):
 
         if mode == "ancestor":
             html = self.get_html_anc()
-        else:
+        elif  mode == "descendant":
             html = self.get_html_desc()
+        elif mode == "central":
+            html = self.get_html_central()
+        else:
+            return
 
-        base_dir = os.path.abspath(os.path.dirname(__file__) + os.sep + "..")
+        base_dir = os.getcwd()
         self.base_url = QUrl.fromLocalFile(base_dir + os.sep)
         self.window.setHtml(html, self.base_url)        
         self.resize(1000, 1000)
-    @pyqtSlot(str, int, int)
-    def calc_coords_anc(self):
-        # Simple approach; optimization is a later step ;o) #
+    def calc_coords_anc(self, ids):
         self.xMax = self.windowOffset
-        for persID in self.ids:
-            box = self.ids[persID]
+        for persID in ids:
+            box = ids[persID]
             # y-Coordinate - start with upper left corner
             box["y"] = self.boxOffset + (box["year"] - self.minYear) * self.dotPerYear
 
@@ -77,8 +82,8 @@ class GraphHtml(QMainWindow):
         found = True
         while found:
             found = False
-            for persID in self.ids:
-                box = self.ids[persID]
+            for persID in ids:
+                box = ids[persID]
                 if box["x"] > 0:
                     continue
 
@@ -90,7 +95,7 @@ class GraphHtml(QMainWindow):
                 else:
                     pers_left = box["mother"]
 
-                if self.ids[pers_left]["x"] == 0:
+                if ids[pers_left]["x"] == 0:
                     continue
 
                 if box["mother"] != -1:      
@@ -98,19 +103,23 @@ class GraphHtml(QMainWindow):
                 else:
                     pers_right = box["father"]   # can be the same as pers_left
                 
-                if self.ids[pers_right]["x"] == 0:
+                if ids[pers_right]["x"] == 0:
                     continue            
 
                 # adjust
-                box["x"] = int(( self.ids[pers_left]["x"] + self.ids[pers_right]["x"] ) / 2)
+                box["x"] = int(( ids[pers_left]["x"] + ids[pers_right]["x"] ) / 2)
                 found = True
         
         self.yMax = 2 * self.boxOffset + (self.maxYear - self.minYear) * self.dotPerYear + self.boxHeight
-    def calc_coords_desc(self):
+    def calc_coords_central(self, asc, desc):
+        self.calc_coords_anc(asc)
+        self.calc_coords_anc(desc)
+
+    def calc_coords_desc(self, ids):
         # Simple approach; optimization is a later step #
         self.xMax = self.windowOffset
-        for persID in self.ids:
-            box = self.ids[persID]
+        for persID in ids:
+            box = ids[persID]
             # y-Coordinate - start with upper left corner
             box["y"] = self.boxOffset + (box["year"] - self.minYear) * self.dotPerYear
 
@@ -125,8 +134,8 @@ class GraphHtml(QMainWindow):
         found = True
         while found:
             found = False
-            for persID in self.ids:
-                box = self.ids[persID]
+            for persID in ids:
+                box = ids[persID]
                 if box["x"] > 0:
                     continue
 
@@ -134,15 +143,15 @@ class GraphHtml(QMainWindow):
                     continue  # Kann das vorkommen?
 
                 child_left = box["children"][0]
-                if self.ids[child_left]["x"] == 0:
+                if ids[child_left]["x"] == 0:
                     continue
 
                 child_right = box["children"][len(box["children"])-1]  # can be the same as child_left
-                if self.ids[child_right]["x"] == 0:
+                if ids[child_right]["x"] == 0:
                     continue            
 
                 # adjust
-                box["x"] = int(( self.ids[child_left]["x"] + self.ids[child_right]["x"] ) / 2)
+                box["x"] = int(( ids[child_left]["x"] + ids[child_right]["x"] ) / 2)
                 found = True
         
         self.yMax = 2 * self.boxOffset + (self.maxYear - self.minYear) * self.dotPerYear + self.boxHeight
@@ -241,7 +250,9 @@ class GraphHtml(QMainWindow):
                 sex_class = 'man '
             elif person["SEX"] in ('f', 'w'):
                 sex_class = 'woman '
-            
+            else:
+                sex_class = ''
+
             if person["finished"] == 'X':
                 finished_class = "solid "
             else:
@@ -265,6 +276,8 @@ class GraphHtml(QMainWindow):
 
         ret = ret + "\n  </div>\n</body>\n</html>"
         return ret
+    def get_html_central(self):
+        return self.get_html_anc()
     def get_html_desc(self):    # Descentants = Nachfahren
         ret = self.get_html_pre()
 
@@ -310,7 +323,9 @@ class GraphHtml(QMainWindow):
                 sex_class = 'man '
             elif person["SEX"] in ('f', 'w'):
                 sex_class = 'woman '
-            
+            else:
+                sex_class = ''
+
             if person["finished"] == 'X':
                 finished_class = "solid "
             else:
@@ -393,7 +408,7 @@ class GraphHtml(QMainWindow):
                 persID = int(element_id.split('_ancestors')[0])
                 self.main.set_person(persID)
                 self.ids, self.lines, self.minYear, self.maxYear = self.main.get_ancestors()
-                self.calc_coords_anc()
+                self.calc_coords_anc(self.ids)
                 new_html = self.get_html_anc()
                 self.window.setHtml(new_html, self.base_url)
 
@@ -401,7 +416,7 @@ class GraphHtml(QMainWindow):
                 persID = int(element_id.split('_descendants')[0])
                 self.main.set_person(persID)
                 self.ids, self.lines, self.minYear, self.maxYear = self.main.get_descendants()
-                self.calc_coords_desc()
+                self.calc_coords_desc(self.ids)
                 new_html = self.get_html_desc()
                 self.window.setHtml(new_html, self.base_url)
 
@@ -415,7 +430,7 @@ class GraphHtml(QMainWindow):
             root = self.ids[key]["id"]
             break
         self.ids, self.lines, self.minYear, self.maxYear = self.main.get_ancestors(root)
-        self.calc_coords_anc()
+        self.calc_coords_anc(self.ids)
         new_html = self.get_html_anc()
         self.window.setHtml(new_html, self.base_url)
     def refresh_page_desc(self):
@@ -423,7 +438,7 @@ class GraphHtml(QMainWindow):
             root = self.ids[key]["id"]
             break
         self.ids, self.lines, self.minYear, self.maxYear = self.main.get_descendants(root)
-        self.calc_coords_desc()
+        self.calc_coords_desc(self.ids)
         new_html = self.get_html_desc()
         self.window.setHtml(new_html, self.base_url)
 
@@ -441,6 +456,10 @@ class GraphList():
         graph = GraphHtml(self.main, idList, lineList, minYear, maxYear, "descendant")
         self.list.append(graph)
         return graph
+    def add_graph_central_html(self, anc, desc, lines, minYear, maxYear):
+        graph = GraphHtml(self.main, anc, lines, minYear, maxYear, "central", desc)
+        self.list.append(graph)
+        return graph
     def setPerson(self, id):
         if id == "":
             return
@@ -453,7 +472,7 @@ class GraphList():
         for graph in self.list:
             graph.clearGraph()
     def close(self):
-        for graph in self.list:
+        for graph in list(self.list):
             graph.close()
             self.list.remove(graph)
 

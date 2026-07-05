@@ -173,11 +173,10 @@ class TableWidget(QWidget):
                 else:
                     self.table.setItem(row, j, QTableWidgetItem(line[j]))
             else:  # "id"-column
-                item = self.table.item(row, j) 
+                item = self.table.item(row, j)
                 if sex == "m":
                     item.setBackground(QColor(230, 247, 252))
                 elif sex == "w":
                     item.setBackground(QColor(252, 239, 230))
                 else:
                     item.setBackground(QColor(255, 255, 255))
-                self.table.setItem(row, j, item)
